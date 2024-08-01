@@ -105,19 +105,24 @@ Main orchestrator for the Academic Claim Analyzer.
 """
 
 import asyncio
-from typing import List, Dict
+import logging
+from typing import List, Type
 from .query_formulator import formulate_queries
 from .paper_scraper import scrape_papers
 from .paper_ranker import rank_papers
-from .search import OpenAlexSearch, ScopusSearch, CoreSearch
-from .models import RankedPaper
+from .search import OpenAlexSearch, ScopusSearch, CoreSearch, BaseSearch
+from .models import ClaimAnalysis, RankedPaper
+
+logger = logging.getLogger(__name__)
+
+SEARCH_MODULES: List[Type[BaseSearch]] = [OpenAlexSearch, ScopusSearch, CoreSearch]
 
 async def analyze_claim(
     claim: str,
     num_queries: int = 5,
     papers_per_query: int = 5,
     num_papers_to_return: int = 1
-) -> List[RankedPaper]:
+) -> ClaimAnalysis:
     """
     Analyze a given claim by searching for relevant papers, ranking them,
     and returning the top-ranked papers with supporting evidence.
@@ -129,41 +134,103 @@ async def analyze_claim(
         num_papers_to_return (int): Number of top-ranked papers to return.
 
     Returns:
-        List[RankedPaper]: List of top-ranked papers with supporting evidence.
+        ClaimAnalysis: Analysis result containing top-ranked papers with supporting evidence.
     """
-    # Formulate queries
-    queries = formulate_queries(claim, num_queries)
+    analysis = ClaimAnalysis(
+        claim=claim,
+        parameters={
+            "num_queries": num_queries,
+            "papers_per_query": papers_per_query,
+            "num_papers_to_return": num_papers_to_return
+        }
+    )
     
-    # Perform searches
-    search_modules = [OpenAlexSearch(), ScopusSearch(), CoreSearch()]
-    all_papers = []
-    for search_module in search_modules:
-        for query in queries:
-            results = await search_module.search(query, papers_per_query)
-            all_papers.extend(results)
+    try:
+        await _perform_analysis(analysis)
+    except Exception as e:
+        logger.error(f"Error during claim analysis: {str(e)}")
+        analysis.metadata["error"] = str(e)
     
-    # Scrape full text
-    scraped_papers = await scrape_papers(all_papers)
-    
-    # Rank papers
-    ranked_papers = await rank_papers(scraped_papers, claim)
-    
-    # Return top N papers
-    return ranked_papers[:num_papers_to_return]
+    return analysis
 
-if __name__ == "__main__":
+async def _perform_analysis(analysis: ClaimAnalysis) -> None:
+    """
+    Perform the actual analysis steps.
+    """
+    await _formulate_queries(analysis)
+    await _perform_searches(analysis)
+    await _scrape_papers(analysis)
+    await _rank_papers(analysis)
+
+async def _formulate_queries(analysis: ClaimAnalysis) -> None:
+    """
+    Formulate queries based on the claim.
+    """
+    queries = formulate_queries(analysis.claim, analysis.parameters["num_queries"])
+    for query in queries:
+        analysis.add_query(query, "formulator")
+
+async def _perform_searches(analysis: ClaimAnalysis) -> None:
+    """
+    Perform searches using all search modules.
+    """
+    search_tasks = []
+    for search_module_class in SEARCH_MODULES:
+        search_module = search_module_class()
+        for query in analysis.queries:
+            search_tasks.append(_search_and_add_results(
+                search_module, query.query, analysis.parameters["papers_per_query"], analysis
+            ))
+    await asyncio.gather(*search_tasks)
+
+async def _search_and_add_results(search_module: BaseSearch, query: str, limit: int, analysis: ClaimAnalysis) -> None:
+    """
+    Perform a search and add results to the analysis.
+    """
+    try:
+        results = await search_module.search(query, limit)
+        for paper in results:
+            analysis.add_search_result(paper)
+    except Exception as e:
+        logger.error(f"Error during search with {search_module.__class__.__name__}: {str(e)}")
+
+async def _scrape_papers(analysis: ClaimAnalysis) -> None:
+    """
+    Scrape full text content for all papers in the analysis.
+    """
+    analysis.search_results = await scrape_papers(analysis.search_results)
+
+async def _rank_papers(analysis: ClaimAnalysis) -> None:
+    """
+    Rank the papers based on relevance to the claim.
+    """
+    ranked_papers = await rank_papers(analysis.search_results, analysis.claim)
+    for paper in ranked_papers:
+        analysis.add_ranked_paper(paper)
+
+async def main():
     claim = "Coffee consumption is associated with reduced risk of type 2 diabetes."
-    results = asyncio.run(analyze_claim(claim))
-    for paper in results:
-        print(f"Title: {paper.title}")
+    analysis_result = await analyze_claim(claim)
+    
+    print(f"Claim: {analysis_result.claim}")
+    print(f"Number of queries generated: {len(analysis_result.queries)}")
+    print(f"Total papers found: {len(analysis_result.search_results)}")
+    print(f"Number of ranked papers: {len(analysis_result.ranked_papers)}")
+    print("\nTop ranked papers:")
+    
+    for paper in analysis_result.get_top_papers(analysis_result.parameters["num_papers_to_return"]):
+        print(f"\nTitle: {paper.title}")
         print(f"Authors: {', '.join(paper.authors)}")
         print(f"DOI: {paper.doi}")
-        print(f"Paper Rank: {paper.rank}")
+        print(f"Relevance Score: {paper.relevance_score}")
         print(f"Analysis: {paper.analysis}")
         print("Relevant Quotes:")
         for quote in paper.relevant_quotes:
             print(f"- {quote}")
-        print("\n")
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    asyncio.run(main())
         </content>
     </file>
     <file>
@@ -172,8 +239,15 @@ if __name__ == "__main__":
         <content>
 # src/academic_claim_analyzer/models.py
 
-from dataclasses import dataclass
-from typing import List
+from dataclasses import dataclass, field
+from typing import List, Dict, Any
+from datetime import datetime
+
+@dataclass
+class SearchQuery:
+    query: str
+    source: str
+    timestamp: datetime = field(default_factory=datetime.utcnow)
 
 @dataclass
 class Paper:
@@ -181,16 +255,39 @@ class Paper:
     authors: List[str]
     year: int
     doi: str
+    abstract: str
+    source: str
     bibtex: str
     full_text: str = ""
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
 @dataclass
 class RankedPaper(Paper):
+    relevance_score: float
     relevant_quotes: List[str]
     analysis: str
-    rank: int
-    
-    
+
+@dataclass
+class ClaimAnalysis:
+    claim: str
+    timestamp: datetime = field(default_factory=datetime.utcnow)
+    parameters: Dict[str, Any] = field(default_factory=dict)
+    queries: List[SearchQuery] = field(default_factory=list)
+    search_results: List[Paper] = field(default_factory=list)
+    ranked_papers: List[RankedPaper] = field(default_factory=list)
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+    def add_query(self, query: str, source: str):
+        self.queries.append(SearchQuery(query, source))
+
+    def add_search_result(self, paper: Paper):
+        self.search_results.append(paper)
+
+    def add_ranked_paper(self, paper: RankedPaper):
+        self.ranked_papers.append(paper)
+
+    def get_top_papers(self, n: int) -> List[RankedPaper]:
+        return sorted(self.ranked_papers, key=lambda x: x.relevance_score, reverse=True)[:n]
         </content>
     </file>
     <file>
@@ -814,21 +911,33 @@ from .main import analyze_claim
 # src/academic_claim_analyzer/search/base.py
 
 from abc import ABC, abstractmethod
-from typing import List
-from ..models import Paper
+from typing import List, Optional
+from dataclasses import dataclass, field
+
+@dataclass
+class SearchResult:
+    doi: str
+    title: str
+    authors: List[str]
+    year: int
+    abstract: Optional[str] = None
+    pdf_link: Optional[str] = None
+    source: str = ""
+    full_text: Optional[str] = None  # Add full_text field
+    metadata: dict = field(default_factory=dict)
 
 class BaseSearch(ABC):
     @abstractmethod
-    async def search(self, query: str, limit: int) -> List[Paper]:
+    async def search(self, query: str, limit: int) -> List[SearchResult]:
         """
-        Perform a search using the given query and return a list of papers.
+        Perform a search using the given query and return a list of search results.
 
         Args:
             query (str): The search query.
-            limit (int): The maximum number of papers to return.
+            limit (int): The maximum number of results to return.
 
         Returns:
-            List[Paper]: A list of Paper objects matching the search query.
+            List[SearchResult]: A list of search results.
         """
         pass
         </content>
@@ -841,26 +950,221 @@ class BaseSearch(ABC):
         </content>
     </file>
     <file>
-        <name>core.py</name>
-        <path>src\academic_claim_analyzer\search\core.py</path>
+        <name>core_search.py</name>
+        <path>src\academic_claim_analyzer\search\core_search.py</path>
         <content>
+# src/academic_claim_analyzer/search/core_search.py
 
+import aiohttp
+import os
+from typing import List
+from dotenv import load_dotenv
+from .base import BaseSearch, SearchResult
+import logging
+
+logger = logging.getLogger(__name__)
+
+load_dotenv()
+
+class CORESearch(BaseSearch):
+    def __init__(self):
+        self.api_key = os.getenv("CORE_API_KEY")
+        if not self.api_key:
+            raise ValueError("CORE_API_KEY not found in environment variables")
+        self.base_url = "https://api.core.ac.uk/v3"
+
+    async def search(self, query: str, limit: int) -> List[SearchResult]:
+        headers = {
+            "Authorization": f"Bearer {self.api_key}",
+            "Accept": "application/json",
+        }
+
+        params = {
+            "q": query,
+            "limit": limit,
+        }
+
+        async with aiohttp.ClientSession() as session:
+            try:
+                async with session.post(f"{self.base_url}/search/works", headers=headers, json=params) as response:
+                    if response.status == 200:
+                        logger.info("CORE API request successful.")
+                        data = await response.json()
+                        return self._parse_results(data)
+                    else:
+                        logger.error(f"CORE API request failed with status code: {response.status}")
+                        return []
+            except Exception as e:
+                logger.error(f"Error occurred while making CORE API request: {str(e)}")
+                return []
+
+    def _parse_results(self, data: dict) -> List[SearchResult]:
+        results = []
+        for entry in data.get("results", []):
+            result = SearchResult(
+                doi=entry.get("doi", ""),
+                title=entry.get("title", ""),
+                authors=[author["name"] for author in entry.get("authors", [])],
+                year=entry.get("publicationYear", 0),
+                abstract=entry.get("abstract", ""),
+                pdf_link=entry.get("downloadUrl", ""),
+                source=entry.get("publisher", ""),
+                full_text=entry.get("fullText", ""),  # Directly assign full_text
+                metadata={
+                    "citation_count": entry.get("citationCount", 0),
+                    "core_id": entry.get("id", "")
+                }
+            )
+            results.append(result)
+        return results
         </content>
     </file>
     <file>
-        <name>openalex.py</name>
-        <path>src\academic_claim_analyzer\search\openalex.py</path>
+        <name>openalex_search.py</name>
+        <path>src\academic_claim_analyzer\search\openalex_search.py</path>
         <content>
+# src/academic_claim_analyzer/search/openalex_search.py
 
+import aiohttp
+import asyncio
+import urllib.parse
+from typing import List
+from .base import BaseSearch, SearchResult
+import logging
 
+logger = logging.getLogger(__name__)
 
+class OpenAlexSearch(BaseSearch):
+    def __init__(self, email: str):
+        self.base_url = "https://api.openalex.org"
+        self.email = email
+        self.semaphore = asyncio.Semaphore(5)  # Limit to 5 concurrent requests
+
+    async def search(self, query: str, limit: int) -> List[SearchResult]:
+        async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=600)) as session:
+            encoded_query = urllib.parse.quote(query)
+            search_url = f"{self.base_url}/works?search={encoded_query}&per_page={limit}&mailto={self.email}"
+
+            async with self.semaphore:
+                try:
+                    await asyncio.sleep(0.2)  # Rate limiting
+                    async with session.get(search_url) as response:
+                        if response.status == 200:
+                            data = await response.json()
+                            return self._parse_results(data)
+                        else:
+                            logger.error(f"Unexpected status code from OpenAlex API: {response.status}")
+                            return []
+                except Exception as e:
+                    logger.error(f"Error occurred while making request to OpenAlex API: {str(e)}")
+                    return []
+
+    def _parse_results(self, data: dict) -> List[SearchResult]:
+        results = []
+        for work in data.get("results", []):
+            result = SearchResult(
+                doi=work.get("doi", ""),
+                title=work.get("title", ""),
+                authors=[author["author"]["display_name"] for author in work.get("authorships", [])],
+                year=work.get("publication_year", 0),
+                abstract=work.get("abstract"),
+                pdf_link=work.get("primary_location", {}).get("pdf_url"),
+                source=work.get("primary_location", {}).get("source", {}).get("display_name", ""),
+                metadata={
+                    "citation_count": work.get("cited_by_count", 0),
+                    "openalex_id": work.get("id", "")
+                }
+            )
+            results.append(result)
+        return results
         </content>
     </file>
     <file>
-        <name>scopus.py</name>
-        <path>src\academic_claim_analyzer\search\scopus.py</path>
+        <name>scopus_search.py</name>
+        <path>src\academic_claim_analyzer\search\scopus_search.py</path>
         <content>
+# src/academic_claim_analyzer/search/scopus_search.py
 
+import aiohttp
+import asyncio
+import os
+from typing import List
+from collections import deque
+import time
+from dotenv import load_dotenv
+from .base import BaseSearch, SearchResult
+import logging
+
+logger = logging.getLogger(__name__)
+
+load_dotenv()
+
+class ScopusSearch(BaseSearch):
+    def __init__(self):
+        self.api_key = os.getenv("SCOPUS_API_KEY")
+        if not self.api_key:
+            raise ValueError("SCOPUS_API_KEY not found in environment variables")
+        self.base_url = "http://api.elsevier.com/content/search/scopus"
+        self.request_times = deque(maxlen=6)
+        self.semaphore = asyncio.Semaphore(5)  # Limit to 5 concurrent requests
+
+    async def search(self, query: str, limit: int) -> List[SearchResult]:
+        headers = {
+            "X-ELS-APIKey": self.api_key,
+            "Accept": "application/json",
+        }
+
+        params = {
+            "query": query,
+            "count": limit,
+            "view": "COMPLETE",
+        }
+
+        async with aiohttp.ClientSession() as session:
+            async with self.semaphore:
+                try:
+                    # Ensure compliance with the rate limit
+                    await self._wait_for_rate_limit()
+
+                    async with session.get(self.base_url, headers=headers, params=params) as response:
+                        if response.status == 200:
+                            data = await response.json()
+                            return self._parse_results(data)
+                        else:
+                            logger.error(f"Scopus API request failed with status code: {response.status}")
+                            return []
+                except Exception as e:
+                    logger.error(f"Error occurred while making Scopus API request: {str(e)}")
+                    return []
+
+    async def _wait_for_rate_limit(self):
+        while True:
+            current_time = time.time()
+            if not self.request_times or current_time - self.request_times[0] >= 1:
+                self.request_times.append(current_time)
+                break
+            else:
+                await asyncio.sleep(0.2)
+
+    def _parse_results(self, data: dict) -> List[SearchResult]:
+        results = []
+        for entry in data.get("search-results", {}).get("entry", []):
+            result = SearchResult(
+                doi=entry.get("prism:doi", ""),
+                title=entry.get("dc:title", ""),
+                authors=[author.get("authname", "") for author in entry.get("author", [])],
+                year=int(entry.get("prism:coverDate", "").split("-")[0]),
+                abstract=entry.get("dc:description", ""),
+                pdf_link="",  # Scopus API doesn't provide direct PDF links
+                source=entry.get("prism:publicationName", ""),
+                metadata={
+                    "citation_count": int(entry.get("citedby-count", 0)),
+                    "scopus_id": entry.get("dc:identifier", ""),
+                    "eid": entry.get("eid", "")
+                }
+            )
+            results.append(result)
+        return results
         </content>
     </file>
     <file>

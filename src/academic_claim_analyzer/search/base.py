@@ -13,6 +13,7 @@ class SearchResult:
     abstract: Optional[str] = None
     pdf_link: Optional[str] = None
     source: str = ""
+    full_text: Optional[str] = None  # Add full_text field
     metadata: dict = field(default_factory=dict)
 
 class BaseSearch(ABC):

@@ -4,7 +4,8 @@ import aiohttp
 import os
 from typing import List
 from dotenv import load_dotenv
-from .base import BaseSearch, SearchResult
+from .base import BaseSearch
+from ..models import Paper
 import logging
 
 logger = logging.getLogger(__name__)
@@ -18,7 +19,7 @@ class CORESearch(BaseSearch):
             raise ValueError("CORE_API_KEY not found in environment variables")
         self.base_url = "https://api.core.ac.uk/v3"
 
-    async def search(self, query: str, limit: int) -> List[SearchResult]:
+    async def search(self, query: str, limit: int) -> List[Paper]:
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Accept": "application/json",
@@ -43,10 +44,10 @@ class CORESearch(BaseSearch):
                 logger.error(f"Error occurred while making CORE API request: {str(e)}")
                 return []
 
-    def _parse_results(self, data: dict) -> List[SearchResult]:
+    def _parse_results(self, data: dict) -> List[Paper]:
         results = []
         for entry in data.get("results", []):
-            result = SearchResult(
+            result = Paper(
                 doi=entry.get("doi", ""),
                 title=entry.get("title", ""),
                 authors=[author["name"] for author in entry.get("authors", [])],
@@ -54,7 +55,7 @@ class CORESearch(BaseSearch):
                 abstract=entry.get("abstract", ""),
                 pdf_link=entry.get("downloadUrl", ""),
                 source=entry.get("publisher", ""),
-                full_text=entry.get("fullText", ""),  # Directly assign full_text
+                full_text=entry.get("fullText", ""),
                 metadata={
                     "citation_count": entry.get("citationCount", 0),
                     "core_id": entry.get("id", "")

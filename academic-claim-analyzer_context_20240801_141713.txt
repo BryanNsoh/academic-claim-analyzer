@@ -1,5 +1,12 @@
+Context extraction timestamp: 20240801_141713
+
 <repository_structure>
 <directory name="academic-claim-analyzer">
+    <file>
+        <name>.env</name>
+        <path>.env</path>
+        <content>Full content not provided</content>
+    </file>
     <file>
         <name>.gitignore</name>
         <path>.gitignore</path>
@@ -25,6 +32,7 @@
         <path>repo_context_extractor.py</path>
         <content>
 import os
+import datetime
 
 EXCLUDED_DIRS = {".git", "__pycache__", "node_modules", ".venv"}
 FULL_CONTENT_EXTENSIONS = {".py", ".dbml", ".yaml"}
@@ -73,16 +81,20 @@ def get_repo_structure(root_folder):
 
 def main():
     root_folder = os.getcwd()  # Use the current working directory
-    output_file = os.path.join(root_folder, "repository_context.txt")
+    base_dir = os.path.basename(root_folder)
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_file = os.path.join(root_folder, f"{base_dir}_context_{timestamp}.txt")
 
     # Delete the previous output file if it exists
-    if os.path.exists(output_file):
-        os.remove(output_file)
-        print(f"Deleted previous {output_file}")
+    for file in os.listdir(root_folder):
+        if file.startswith(f"{base_dir}_context_") and file.endswith(".txt"):
+            os.remove(os.path.join(root_folder, file))
+            print(f"Deleted previous context file: {file}")
 
     repo_structure = get_repo_structure(root_folder)
 
     with open(output_file, "w", encoding="utf-8") as f:
+        f.write(f"Context extraction timestamp: {timestamp}\n\n")
         f.write(repo_structure)
 
     print(f"Fresh repository context has been extracted to {output_file}")
@@ -240,7 +252,7 @@ if __name__ == "__main__":
 # src/academic_claim_analyzer/models.py
 
 from dataclasses import dataclass, field
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from datetime import datetime
 
 @dataclass
@@ -255,10 +267,11 @@ class Paper:
     authors: List[str]
     year: int
     doi: str
-    abstract: str
-    source: str
-    bibtex: str
-    full_text: str = ""
+    abstract: Optional[str] = None
+    source: str = ""
+    full_text: Optional[str] = None
+    pdf_link: Optional[str] = None
+    bibtex: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 @dataclass
@@ -740,6 +753,10 @@ if __name__ == "__main__":
         <content>
 # src/academic_claim_analyzer/query_formulator.py
 
+from typing import List
+import json
+from async_llm_handler import LLMHandler
+
 SCOPUS_SEARCH_GUIDE = """
 Syntax and Operators
 
@@ -833,15 +850,15 @@ You are tasked with generating optimized search queries to find relevant researc
 
 1. Review the following point that needs to be addressed by the literature search:
 <point_content>
-{{POINT_CONTENT}}
+{POINT_CONTENT}
 </point_content>
 
 2. Consider the following search guidance:
 <search_guidance>
-{{SEARCH_GUIDANCE}}
+{SEARCH_GUIDANCE}
 </search_guidance>
 
-3. Generate {{NUM_QUERIES}} highly optimized search queries that would surface the most relevant, insightful, and comprehensive set of research articles to shed light on various aspects of the given point. Your queries should:
+3. Generate {NUM_QUERIES} highly optimized search queries that would surface the most relevant, insightful, and comprehensive set of research articles to shed light on various aspects of the given point. Your queries should:
 
 - Directly address the key issues and nuances of the point content
 - Demonstrate creativity and variety to capture different dimensions of the topic
@@ -858,7 +875,7 @@ You are tasked with generating optimized search queries to find relevant researc
   ...
 ]
 
-Replace query_1, query_2, etc. with your actual search queries. The number of queries should match {{NUM_QUERIES}}.
+Replace query_1, query_2, etc. with your actual search queries. The number of queries should match {NUM_QUERIES}.
 
 5. If the search guidance specifies a particular platform (e.g., Scopus, Web of Science), ensure your queries are formatted appropriately for that platform.
 
@@ -870,21 +887,43 @@ Generate the list of search queries now, following the instructions above.
 
 
 
-from typing import List
-
-def formulate_queries(claim: str, num_queries: int) -> List[str]:
+async def formulate_queries(claim: str, num_queries: int, query_type: str) -> List[str]:
     """
     Generate search queries based on the given claim.
 
     Args:
         claim (str): The claim to generate queries for.
         num_queries (int): The number of queries to generate.
+        query_type (str): The type of query to generate ('scopus' or 'openalex').
 
     Returns:
         List[str]: A list of generated search queries.
     """
-    # Implementation details will be added later
-    pass
+    handler = LLMHandler()
+
+    if query_type.lower() == 'scopus':
+        search_guidance = SCOPUS_SEARCH_GUIDE
+    elif query_type.lower() == 'openalex':
+        search_guidance = OPENALEX_SEARCH_GUIDE
+    else:
+        raise ValueError(f"Unsupported query type: {query_type}")
+
+    prompt = GENERATE_QUERIES.format(
+        point_content=claim,
+        search_guidance=search_guidance,
+        num_queries=num_queries,
+        query_type=query_type
+    )
+
+    response = await handler.query(prompt, model="gpt_4o_mini", sync=False)
+    
+    try:
+        queries = json.loads(response)
+        if not isinstance(queries, list) or len(queries) != num_queries:
+            raise ValueError("Invalid response format")
+        return queries
+    except json.JSONDecodeError:
+        raise ValueError("Failed to parse the response as JSON")
         </content>
     </file>
     <file>
@@ -911,24 +950,12 @@ from .main import analyze_claim
 # src/academic_claim_analyzer/search/base.py
 
 from abc import ABC, abstractmethod
-from typing import List, Optional
-from dataclasses import dataclass, field
-
-@dataclass
-class SearchResult:
-    doi: str
-    title: str
-    authors: List[str]
-    year: int
-    abstract: Optional[str] = None
-    pdf_link: Optional[str] = None
-    source: str = ""
-    full_text: Optional[str] = None  # Add full_text field
-    metadata: dict = field(default_factory=dict)
+from typing import List
+from ..models import Paper
 
 class BaseSearch(ABC):
     @abstractmethod
-    async def search(self, query: str, limit: int) -> List[SearchResult]:
+    async def search(self, query: str, limit: int) -> List[Paper]:
         """
         Perform a search using the given query and return a list of search results.
 
@@ -937,7 +964,7 @@ class BaseSearch(ABC):
             limit (int): The maximum number of results to return.
 
         Returns:
-            List[SearchResult]: A list of search results.
+            List[Paper]: A list of search results.
         """
         pass
         </content>
@@ -959,7 +986,8 @@ import aiohttp
 import os
 from typing import List
 from dotenv import load_dotenv
-from .base import BaseSearch, SearchResult
+from .base import BaseSearch
+from ..models import Paper
 import logging
 
 logger = logging.getLogger(__name__)
@@ -973,7 +1001,7 @@ class CORESearch(BaseSearch):
             raise ValueError("CORE_API_KEY not found in environment variables")
         self.base_url = "https://api.core.ac.uk/v3"
 
-    async def search(self, query: str, limit: int) -> List[SearchResult]:
+    async def search(self, query: str, limit: int) -> List[Paper]:
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Accept": "application/json",
@@ -998,10 +1026,10 @@ class CORESearch(BaseSearch):
                 logger.error(f"Error occurred while making CORE API request: {str(e)}")
                 return []
 
-    def _parse_results(self, data: dict) -> List[SearchResult]:
+    def _parse_results(self, data: dict) -> List[Paper]:
         results = []
         for entry in data.get("results", []):
-            result = SearchResult(
+            result = Paper(
                 doi=entry.get("doi", ""),
                 title=entry.get("title", ""),
                 authors=[author["name"] for author in entry.get("authors", [])],
@@ -1009,7 +1037,7 @@ class CORESearch(BaseSearch):
                 abstract=entry.get("abstract", ""),
                 pdf_link=entry.get("downloadUrl", ""),
                 source=entry.get("publisher", ""),
-                full_text=entry.get("fullText", ""),  # Directly assign full_text
+                full_text=entry.get("fullText", ""),
                 metadata={
                     "citation_count": entry.get("citationCount", 0),
                     "core_id": entry.get("id", "")
@@ -1029,7 +1057,8 @@ import aiohttp
 import asyncio
 import urllib.parse
 from typing import List
-from .base import BaseSearch, SearchResult
+from .base import BaseSearch
+from ..models import Paper
 import logging
 
 logger = logging.getLogger(__name__)
@@ -1040,7 +1069,7 @@ class OpenAlexSearch(BaseSearch):
         self.email = email
         self.semaphore = asyncio.Semaphore(5)  # Limit to 5 concurrent requests
 
-    async def search(self, query: str, limit: int) -> List[SearchResult]:
+    async def search(self, query: str, limit: int) -> List[Paper]:
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=600)) as session:
             encoded_query = urllib.parse.quote(query)
             search_url = f"{self.base_url}/works?search={encoded_query}&per_page={limit}&mailto={self.email}"
@@ -1059,10 +1088,10 @@ class OpenAlexSearch(BaseSearch):
                     logger.error(f"Error occurred while making request to OpenAlex API: {str(e)}")
                     return []
 
-    def _parse_results(self, data: dict) -> List[SearchResult]:
+    def _parse_results(self, data: dict) -> List[Paper]:
         results = []
         for work in data.get("results", []):
-            result = SearchResult(
+            result = Paper(
                 doi=work.get("doi", ""),
                 title=work.get("title", ""),
                 authors=[author["author"]["display_name"] for author in work.get("authorships", [])],
@@ -1092,7 +1121,8 @@ from typing import List
 from collections import deque
 import time
 from dotenv import load_dotenv
-from .base import BaseSearch, SearchResult
+from .base import BaseSearch
+from ..models import Paper
 import logging
 
 logger = logging.getLogger(__name__)
@@ -1108,7 +1138,7 @@ class ScopusSearch(BaseSearch):
         self.request_times = deque(maxlen=6)
         self.semaphore = asyncio.Semaphore(5)  # Limit to 5 concurrent requests
 
-    async def search(self, query: str, limit: int) -> List[SearchResult]:
+    async def search(self, query: str, limit: int) -> List[Paper]:
         headers = {
             "X-ELS-APIKey": self.api_key,
             "Accept": "application/json",
@@ -1146,10 +1176,10 @@ class ScopusSearch(BaseSearch):
             else:
                 await asyncio.sleep(0.2)
 
-    def _parse_results(self, data: dict) -> List[SearchResult]:
+    def _parse_results(self, data: dict) -> List[Paper]:
         results = []
         for entry in data.get("search-results", {}).get("entry", []):
-            result = SearchResult(
+            result = Paper(
                 doi=entry.get("prism:doi", ""),
                 title=entry.get("dc:title", ""),
                 authors=[author.get("authname", "") for author in entry.get("author", [])],
@@ -1177,16 +1207,182 @@ class ScopusSearch(BaseSearch):
             </directory>
     <directory name="tests">
     <file>
+        <name>conftest.py</name>
+        <path>tests\conftest.py</path>
+        <content>
+# tests\conftest.py
+
+
+
+        </content>
+    </file>
+    <file>
+        <name>test_claim_analysis_e2e.py</name>
+        <path>tests\test_claim_analysis_e2e.py</path>
+        <content>
+# tests\test_claim_analysis_e2e.py
+
+
+
+        </content>
+    </file>
+    <file>
         <name>test_main.py</name>
         <path>tests\test_main.py</path>
         <content>
+# tests/test_main.py
 
+import pytest
+from unittest.mock import patch, MagicMock
+from src.academic_claim_analyzer.main import analyze_claim
+from src.academic_claim_analyzer.models import ClaimAnalysis, Paper, RankedPaper
+
+@pytest.fixture
+def mock_search_results():
+    return [
+        Paper(
+            doi="10.1016/j.diabres.2023.03.050",
+            title="Coffee consumption and risk of type 2 diabetes: An updated meta-analysis of prospective cohort studies",
+            authors=["Jiali Zheng", "Jingjing Zhang", "Yong Zhou"],
+            year=2023,
+            abstract="This meta-analysis of prospective cohort studies suggests that coffee consumption is associated with a reduced risk of type 2 diabetes, with the strongest effect observed for 3-4 cups per day.",
+            source="Diabetes Research and Clinical Practice"
+        ),
+        Paper(
+            doi="10.2337/dc20-1800",
+            title="Long-term coffee consumption, caffeine metabolism genetics, and risk of cardiovascular disease: a prospective analysis of up to 347,077 individuals and 8368 cases",
+            authors=["Licia Iacoviello", "Marialaura Bonaccio", "Augusto Di Castelnuovo"],
+            year=2021,
+            abstract="This large prospective study suggests that coffee consumption is associated with a lower risk of cardiovascular disease, with the relationship influenced by caffeine metabolism genetics.",
+            source="Diabetes Care"
+        )
+    ]
+
+@pytest.fixture
+def mock_ranked_papers():
+    return [
+        RankedPaper(
+            doi="10.1016/j.diabres.2023.03.050",
+            title="Coffee consumption and risk of type 2 diabetes: An updated meta-analysis of prospective cohort studies",
+            authors=["Jiali Zheng", "Jingjing Zhang", "Yong Zhou"],
+            year=2023,
+            abstract="This meta-analysis of prospective cohort studies suggests that coffee consumption is associated with a reduced risk of type 2 diabetes, with the strongest effect observed for 3-4 cups per day.",
+            source="Diabetes Research and Clinical Practice",
+            relevance_score=0.95,
+            relevant_quotes=["coffee consumption is associated with a reduced risk of type 2 diabetes"],
+            analysis="This meta-analysis provides strong evidence supporting the claim that coffee consumption is associated with reduced risk of type 2 diabetes."
+        ),
+        RankedPaper(
+            doi="10.2337/dc20-1800",
+            title="Long-term coffee consumption, caffeine metabolism genetics, and risk of cardiovascular disease: a prospective analysis of up to 347,077 individuals and 8368 cases",
+
+            authors=["Licia Iacoviello", "Marialaura Bonaccio", "Augusto Di Castelnuovo"],
+            year=2021,
+            abstract="This large prospective study suggests that coffee consumption is associated with a lower risk of cardiovascular disease, with the relationship influenced by caffeine metabolism genetics.",
+            source="Diabetes Care",
+            relevance_score=0.75,
+            relevant_quotes=["coffee consumption is associated with a lower risk of cardiovascular disease"],
+            analysis="While this study focuses on cardiovascular disease, it provides indirect support for the potential health benefits of coffee consumption, which may be relevant to the claim about type 2 diabetes risk reduction."
+        )
+    ]
+
+@pytest.mark.asyncio
+async def test_analyze_claim(mock_search_results, mock_ranked_papers):
+    with patch('src.academic_claim_analyzer.query_formulator.formulate_queries') as mock_formulate_queries, \
+         patch('src.academic_claim_analyzer.search.OpenAlexSearch.search') as mock_search, \
+         patch('src.academic_claim_analyzer.paper_scraper.scrape_papers') as mock_scrape_papers, \
+         patch('src.academic_claim_analyzer.paper_ranker.rank_papers') as mock_rank_papers:
+
+        mock_formulate_queries.return_value = [
+            "TITLE-ABS-KEY(coffee AND consumption AND (\"type 2 diabetes\" OR \"diabetes mellitus\") AND risk)",
+            "TITLE-ABS-KEY(\"coffee intake\" AND \"diabetes risk\" AND (meta-analysis OR \"systematic review\"))"
+        ]
+        mock_search.return_value = mock_search_results
+        mock_scrape_papers.return_value = mock_search_results
+        mock_rank_papers.return_value = mock_ranked_papers
+
+        claim = "Coffee consumption is associated with reduced risk of type 2 diabetes."
+        result = await analyze_claim(claim, num_queries=2, papers_per_query=2, num_papers_to_return=2)
+
+        assert isinstance(result, ClaimAnalysis)
+        assert result.claim == claim
+        assert len(result.queries) == 2
+        assert len(result.search_results) == 4  # 2 queries * 2 papers per query
+        assert len(result.ranked_papers) == 2
+
+        top_papers = result.get_top_papers(2)
+        assert len(top_papers) == 2
+        assert top_papers[0].relevance_score >= top_papers[1].relevance_score
+        assert "meta-analysis" in top_papers[0].title.lower()
+        assert "type 2 diabetes" in top_papers[0].title.lower()
+
+@pytest.mark.asyncio
+async def test_analyze_claim_error_handling():
+    with patch('src.academic_claim_analyzer.query_formulator.formulate_queries', side_effect=Exception("API rate limit exceeded")):
+        claim = "Mindfulness meditation can help reduce symptoms of anxiety and depression."
+        result = await analyze_claim(claim)
+        assert isinstance(result, ClaimAnalysis)
+        assert result.claim == claim
+        assert "error" in result.metadata
+        assert result.metadata["error"] == "API rate limit exceeded"
+        assert len(result.queries) == 0
+        assert len(result.search_results) == 0
+        assert len(result.ranked_papers) == 0
+
+@pytest.mark.asyncio
+async def test_analyze_claim_no_results():
+    with patch('src.academic_claim_analyzer.query_formulator.formulate_queries') as mock_formulate_queries, \
+         patch('src.academic_claim_analyzer.search.OpenAlexSearch.search') as mock_search:
+
+        mock_formulate_queries.return_value = ["TITLE-ABS-KEY(non_existent_topic AND improbable_research)"]
+        mock_search.return_value = []
+
+        claim = "Non-existent topic is related to improbable research outcomes."
+        result = await analyze_claim(claim, num_queries=1, papers_per_query=5, num_papers_to_return=2)
+
+        assert isinstance(result, ClaimAnalysis)
+        assert result.claim == claim
+        assert len(result.queries) == 1
+        assert len(result.search_results) == 0
+        assert len(result.ranked_papers) == 0
+        assert "No relevant papers found" in result.metadata.get("analysis", "")
+
+@pytest.mark.asyncio
+async def test_analyze_claim_partial_results():
+    with patch('src.academic_claim_analyzer.query_formulator.formulate_queries') as mock_formulate_queries, \
+         patch('src.academic_claim_analyzer.search.OpenAlexSearch.search') as mock_search, \
+         patch('src.academic_claim_analyzer.paper_scraper.scrape_papers') as mock_scrape_papers, \
+         patch('src.academic_claim_analyzer.paper_ranker.rank_papers') as mock_rank_papers:
+
+        mock_formulate_queries.return_value = [
+            "TITLE-ABS-KEY(exercise AND \"cardiovascular health\" AND \"older adults\")",
+            "TITLE-ABS-KEY(\"physical activity\" AND \"heart disease\" AND elderly)"
+        ]
+        mock_search.side_effect = [mock_search_results[:1], []]  # First query returns one result, second query returns no results
+        mock_scrape_papers.return_value = mock_search_results[:1]
+        mock_rank_papers.return_value = mock_ranked_papers[:1]
+
+        claim = "Regular exercise is linked to improved cardiovascular health in older adults."
+        result = await analyze_claim(claim, num_queries=2, papers_per_query=2, num_papers_to_return=2)
+
+        assert isinstance(result, ClaimAnalysis)
+        assert result.claim == claim
+        assert len(result.queries) == 2
+        assert len(result.search_results) == 1
+        assert len(result.ranked_papers) == 1
+        assert "Partial results found" in result.metadata.get("analysis", "")
+
+if __name__ == "__main__":
+    pytest.main()
         </content>
     </file>
     <file>
         <name>test_paper_ranker.py</name>
         <path>tests\test_paper_ranker.py</path>
         <content>
+# tests\test_paper_ranker.py
+
+
 
         </content>
     </file>
@@ -1194,6 +1390,9 @@ class ScopusSearch(BaseSearch):
         <name>test_paper_scraper.py</name>
         <path>tests\test_paper_scraper.py</path>
         <content>
+# tests\test_paper_scraper.py
+
+
 
         </content>
     </file>
@@ -1201,13 +1400,87 @@ class ScopusSearch(BaseSearch):
         <name>test_query_formulator.py</name>
         <path>tests\test_query_formulator.py</path>
         <content>
+# tests/test_query_formulator.py
+
+import pytest
+from src.academic_claim_analyzer.query_formulator import formulate_queries
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("claim, num_queries, query_type, expected_keywords", [
+    (
+        "Coffee consumption is associated with reduced risk of type 2 diabetes.",
+        3,
+        "scopus",
+        ["coffee", "consumption", "reduced risk", "type 2 diabetes", "association"]
+    ),
+    (
+        "Mindfulness meditation can help reduce symptoms of anxiety and depression.",
+        4,
+        "openalex",
+        ["mindfulness", "meditation", "anxiety", "depression", "symptoms", "reduce"]
+    ),
+    (
+        "Regular exercise is linked to improved cardiovascular health in older adults.",
+        5,
+        "scopus",
+        ["regular exercise", "cardiovascular health", "older adults", "linked", "improved"]
+    ),
+])
+async def test_formulate_queries(claim, num_queries, query_type, expected_keywords):
+    queries = await formulate_queries(claim, num_queries, query_type)
+    assert isinstance(queries, list)
+    assert len(queries) == num_queries
+    for query in queries:
+        assert isinstance(query, str)
+        assert len(query) > 0
+        assert any(keyword.lower() in query.lower() for keyword in expected_keywords)
+
+    # Check if queries are different from each other
+    assert len(set(queries)) == num_queries
+
+    # Check if queries adhere to the specified query type format
+    if query_type.lower() == 'scopus':
+        assert all("TITLE-ABS-KEY" in query for query in queries)
+    elif query_type.lower() == 'openalex':
+        assert all(query.startswith('"') or query.startswith('-') or query.startswith('+') for query in queries)
+
+@pytest.mark.asyncio
+async def test_formulate_queries_invalid_query_type():
+    with pytest.raises(ValueError, match="Unsupported query type"):
+        await formulate_queries("Test claim", 3, "invalid_type")
+
+@pytest.mark.asyncio
+async def test_formulate_queries_error_handling():
+    # Test with invalid JSON response (simulated by mocking the LLMHandler)
+    with pytest.patch('src.academic_claim_analyzer.query_formulator.LLMHandler') as mock_handler:
+        mock_handler.return_value.query.return_value = "Invalid JSON"
+        with pytest.raises(ValueError, match="Failed to parse the response as JSON"):
+            await formulate_queries("Test claim", 3, "scopus")
+
+    # Test with valid JSON but incorrect format
+    with pytest.patch('src.academic_claim_analyzer.query_formulator.LLMHandler') as mock_handler:
+        mock_handler.return_value.query.return_value = '{"key": "value"}'
+        with pytest.raises(ValueError, match="Invalid response format"):
+            await formulate_queries("Test claim", 3, "scopus")
+        </content>
+    </file>
+    <file>
+        <name>test_scrape_rank_integration.py</name>
+        <path>tests\test_scrape_rank_integration.py</path>
+        <content>
+# tests\test_scrape_rank_integration.py
+
+
 
         </content>
     </file>
     <file>
-        <name>__init__.py</name>
-        <path>tests\__init__.py</path>
+        <name>test_search_integration.py</name>
+        <path>tests\test_search_integration.py</path>
         <content>
+# tests\test_search_integration.py
+
+
 
         </content>
     </file>
@@ -1217,28 +1490,208 @@ class ScopusSearch(BaseSearch):
         <name>test_core.py</name>
         <path>tests\test_search\test_core.py</path>
         <content>
+# tests/test_search/test_core.py
 
+import pytest
+from unittest.mock import patch, MagicMock
+from src.academic_claim_analyzer.search.core_search import CORESearch
+from src.academic_claim_analyzer.models import Paper
+
+@pytest.fixture
+def mock_core_response():
+    return {
+        "results": [
+            {
+                "doi": "10.1161/CIRCULATIONAHA.120.050775",
+                "title": "Physical Activity and Cardiovascular Health in Older Adults: A Comprehensive Review",
+                "authors": [
+                    {"name": "Jennifer L. Carter"},
+                    {"name": "Robert A. Thompson"},
+                    {"name": "Lisa M. Brown"}
+                ],
+                "publicationYear": 2021,
+                "abstract": "This comprehensive review examines the relationship between regular physical activity and cardiovascular health in older adults. The evidence strongly supports that engagement in regular exercise is associated with improved cardiovascular outcomes, including reduced risk of heart disease, stroke, and mortality.",
+                "downloadUrl": "https://www.ahajournals.org/doi/pdf/10.1161/CIRCULATIONAHA.120.050775",
+                "publisher": "Circulation",
+                "fullText": "This is the full text of the paper, including detailed methods, results, and discussion...",
+                "citationCount": 45,
+                "id": "core:98765432"
+            }
+        ]
+    }
+
+@pytest.mark.asyncio
+async def test_core_search(mock_core_response):
+    with patch('aiohttp.ClientSession.post') as mock_post:
+        mock_post.return_value.__aenter__.return_value.status = 200
+        mock_post.return_value.__aenter__.return_value.json = MagicMock(return_value=mock_core_response)
+
+        with patch.dict('os.environ', {'CORE_API_KEY': 'fake_api_key'}):
+            search = CORESearch()
+            results = await search.search("physical activity cardiovascular health older adults", 1)
+
+            assert len(results) == 1
+            paper = results[0]
+            assert isinstance(paper, Paper)
+            assert paper.doi == "10.1161/CIRCULATIONAHA.120.050775"
+            assert paper.title == "Physical Activity and Cardiovascular Health in Older Adults: A Comprehensive Review"
+            assert paper.authors == ["Jennifer L. Carter", "Robert A. Thompson", "Lisa M. Brown"]
+            assert paper.year == 2021
+            assert "relationship between regular physical activity and cardiovascular health in older adults" in paper.abstract
+            assert paper.pdf_link == "https://www.ahajournals.org/doi/pdf/10.1161/CIRCULATIONAHA.120.050775"
+            assert paper.source == "Circulation"
+            assert "This is the full text of the paper" in paper.full_text
+            assert paper.metadata["citation_count"] == 45
+            assert paper.metadata["core_id"] == "core:98765432"
+
+@pytest.mark.asyncio
+async def test_core_search_error():
+    with patch('aiohttp.ClientSession.post') as mock_post:
+        mock_post.return_value.__aenter__.return_value.status = 500
+
+        with patch.dict('os.environ', {'CORE_API_KEY': 'fake_api_key'}):
+            search = CORESearch()
+            results = await search.search("physical activity cardiovascular health older adults", 1)
+
+            assert len(results) == 0
         </content>
     </file>
     <file>
         <name>test_openalex.py</name>
         <path>tests\test_search\test_openalex.py</path>
         <content>
+# tests/test_search/test_openalex.py
 
+import pytest
+from unittest.mock import patch, MagicMock
+from src.academic_claim_analyzer.search.openalex_search import OpenAlexSearch
+from src.academic_claim_analyzer.models import Paper
+
+@pytest.fixture
+def mock_openalex_response():
+    return {
+        "results": [
+            {
+                "doi": "10.1016/j.diabres.2023.03.050",
+                "title": "Coffee consumption and risk of type 2 diabetes: An updated meta-analysis of prospective cohort studies",
+                "authorships": [
+                    {"author": {"display_name": "Jiali Zheng"}},
+                    {"author": {"display_name": "Jingjing Zhang"}},
+                    {"author": {"display_name": "Yong Zhou"}}
+                ],
+                "publication_year": 2023,
+                "abstract": "This meta-analysis of prospective cohort studies suggests that coffee consumption is associated with a reduced risk of type 2 diabetes, with the strongest effect observed for 3-4 cups per day.",
+                "primary_location": {
+                    "pdf_url": "https://www.sciencedirect.com/science/article/pii/S0168822723001512/pdf",
+                    "source": {"display_name": "Diabetes Research and Clinical Practice"}
+                },
+                "cited_by_count": 12,
+                "id": "W4235689012"
+            }
+        ]
+    }
+
+@pytest.mark.asyncio
+async def test_openalex_search(mock_openalex_response):
+    with patch('aiohttp.ClientSession.get') as mock_get:
+        mock_get.return_value.__aenter__.return_value.status = 200
+        mock_get.return_value.__aenter__.return_value.json = MagicMock(return_value=mock_openalex_response)
+
+        search = OpenAlexSearch(email="researcher@university.edu")
+        results = await search.search("coffee consumption type 2 diabetes", 1)
+
+        assert len(results) == 1
+        paper = results[0]
+        assert isinstance(paper, Paper)
+        assert paper.doi == "10.1016/j.diabres.2023.03.050"
+        assert paper.title == "Coffee consumption and risk of type 2 diabetes: An updated meta-analysis of prospective cohort studies"
+        assert paper.authors == ["Jiali Zheng", "Jingjing Zhang", "Yong Zhou"]
+        assert paper.year == 2023
+        assert "coffee consumption is associated with a reduced risk of type 2 diabetes" in paper.abstract
+        assert paper.pdf_link == "https://www.sciencedirect.com/science/article/pii/S0168822723001512/pdf"
+        assert paper.source == "Diabetes Research and Clinical Practice"
+        assert paper.metadata["citation_count"] == 12
+        assert paper.metadata["openalex_id"] == "W4235689012"
+
+@pytest.mark.asyncio
+async def test_openalex_search_error():
+    with patch('aiohttp.ClientSession.get') as mock_get:
+        mock_get.return_value.__aenter__.return_value.status = 500
+
+        search = OpenAlexSearch(email="researcher@university.edu")
+        results = await search.search("coffee consumption type 2 diabetes", 1)
+
+        assert len(results) == 0
         </content>
     </file>
     <file>
         <name>test_scopus.py</name>
         <path>tests\test_search\test_scopus.py</path>
         <content>
+# tests/test_search/test_scopus.py
 
-        </content>
-    </file>
-    <file>
-        <name>__init__.py</name>
-        <path>tests\test_search\__init__.py</path>
-        <content>
+import pytest
+from unittest.mock import patch, MagicMock
+from src.academic_claim_analyzer.search.scopus_search import ScopusSearch
+from src.academic_claim_analyzer.models import Paper
 
+@pytest.fixture
+def mock_scopus_response():
+    return {
+        "search-results": {
+            "entry": [
+                {
+                    "prism:doi": "10.1016/j.jad.2022.01.053",
+                    "dc:title": "Mindfulness-based interventions for anxiety and depression in adults: A meta-analysis of randomized controlled trials",
+                    "author": [
+                        {"authname": "Sarah J. Goldberg"},
+                        {"authname": "Michael A. Smith"},
+                        {"authname": "Emily R. Johnson"}
+                    ],
+                    "prism:coverDate": "2022-04-15",
+                    "dc:description": "This meta-analysis provides evidence that mindfulness-based interventions are effective in reducing symptoms of anxiety and depression in adults, with moderate effect sizes observed across various clinical and non-clinical populations.",
+                    "prism:publicationName": "Journal of Affective Disorders",
+                    "citedby-count": "87",
+                    "dc:identifier": "SCOPUS_ID:85123456789",
+                    "eid": "2-s2.0-85123456789"
+                }
+            ]
+        }
+    }
+
+@pytest.mark.asyncio
+async def test_scopus_search(mock_scopus_response):
+    with patch('aiohttp.ClientSession.get') as mock_get:
+        mock_get.return_value.__aenter__.return_value.status = 200
+        mock_get.return_value.__aenter__.return_value.json = MagicMock(return_value=mock_scopus_response)
+
+        with patch.dict('os.environ', {'SCOPUS_API_KEY': 'fake_api_key'}):
+            search = ScopusSearch()
+            results = await search.search("mindfulness anxiety depression meta-analysis", 1)
+
+            assert len(results) == 1
+            paper = results[0]
+            assert isinstance(paper, Paper)
+            assert paper.doi == "10.1016/j.jad.2022.01.053"
+            assert paper.title == "Mindfulness-based interventions for anxiety and depression in adults: A meta-analysis of randomized controlled trials"
+            assert paper.authors == ["Sarah J. Goldberg", "Michael A. Smith", "Emily R. Johnson"]
+            assert paper.year == 2022
+            assert "mindfulness-based interventions are effective in reducing symptoms of anxiety and depression" in paper.abstract
+            assert paper.source == "Journal of Affective Disorders"
+            assert paper.metadata["citation_count"] == 87
+            assert paper.metadata["scopus_id"] == "SCOPUS_ID:85123456789"
+            assert paper.metadata["eid"] == "2-s2.0-85123456789"
+
+@pytest.mark.asyncio
+async def test_scopus_search_error():
+    with patch('aiohttp.ClientSession.get') as mock_get:
+        mock_get.return_value.__aenter__.return_value.status = 500
+
+        with patch.dict('os.environ', {'SCOPUS_API_KEY': 'fake_api_key'}):
+            search = ScopusSearch()
+            results = await search.search("mindfulness anxiety depression meta-analysis", 1)
+
+            assert len(results) == 0
         </content>
     </file>
         </directory>

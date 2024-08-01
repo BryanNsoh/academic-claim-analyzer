@@ -1,0 +1,16 @@
+# src/requirements.txt
+
+aiohttp
+anthropic
+google-generativeai
+openai
+python-dotenv
+tiktoken
+asyncio
+pytest
+pytest-asyncio
+beautifulsoup4
+fitz
+playwright
+fake-useragent
+async-llm-handler

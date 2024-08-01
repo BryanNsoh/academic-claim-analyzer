@@ -4,7 +4,8 @@ import aiohttp
 import asyncio
 import urllib.parse
 from typing import List
-from .base import BaseSearch, SearchResult
+from .base import BaseSearch
+from ..models import Paper
 import logging
 
 logger = logging.getLogger(__name__)
@@ -15,7 +16,7 @@ class OpenAlexSearch(BaseSearch):
         self.email = email
         self.semaphore = asyncio.Semaphore(5)  # Limit to 5 concurrent requests
 
-    async def search(self, query: str, limit: int) -> List[SearchResult]:
+    async def search(self, query: str, limit: int) -> List[Paper]:
         async with aiohttp.ClientSession(timeout=aiohttp.ClientTimeout(total=600)) as session:
             encoded_query = urllib.parse.quote(query)
             search_url = f"{self.base_url}/works?search={encoded_query}&per_page={limit}&mailto={self.email}"
@@ -34,10 +35,10 @@ class OpenAlexSearch(BaseSearch):
                     logger.error(f"Error occurred while making request to OpenAlex API: {str(e)}")
                     return []
 
-    def _parse_results(self, data: dict) -> List[SearchResult]:
+    def _parse_results(self, data: dict) -> List[Paper]:
         results = []
         for work in data.get("results", []):
-            result = SearchResult(
+            result = Paper(
                 doi=work.get("doi", ""),
                 title=work.get("title", ""),
                 authors=[author["author"]["display_name"] for author in work.get("authorships", [])],

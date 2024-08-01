@@ -1,4 +1,5 @@
 import os
+import datetime
 
 EXCLUDED_DIRS = {".git", "__pycache__", "node_modules", ".venv"}
 FULL_CONTENT_EXTENSIONS = {".py", ".dbml", ".yaml"}
@@ -47,16 +48,20 @@ def get_repo_structure(root_folder):
 
 def main():
     root_folder = os.getcwd()  # Use the current working directory
-    output_file = os.path.join(root_folder, "repository_context.txt")
+    base_dir = os.path.basename(root_folder)
+    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_file = os.path.join(root_folder, f"{base_dir}_context_{timestamp}.txt")
 
     # Delete the previous output file if it exists
-    if os.path.exists(output_file):
-        os.remove(output_file)
-        print(f"Deleted previous {output_file}")
+    for file in os.listdir(root_folder):
+        if file.startswith(f"{base_dir}_context_") and file.endswith(".txt"):
+            os.remove(os.path.join(root_folder, file))
+            print(f"Deleted previous context file: {file}")
 
     repo_structure = get_repo_structure(root_folder)
 
     with open(output_file, "w", encoding="utf-8") as f:
+        f.write(f"Context extraction timestamp: {timestamp}\n\n")
         f.write(repo_structure)
 
     print(f"Fresh repository context has been extracted to {output_file}")

@@ -7,7 +7,8 @@ from typing import List
 from collections import deque
 import time
 from dotenv import load_dotenv
-from .base import BaseSearch, SearchResult
+from .base import BaseSearch
+from ..models import Paper
 import logging
 
 logger = logging.getLogger(__name__)
@@ -23,7 +24,7 @@ class ScopusSearch(BaseSearch):
         self.request_times = deque(maxlen=6)
         self.semaphore = asyncio.Semaphore(5)  # Limit to 5 concurrent requests
 
-    async def search(self, query: str, limit: int) -> List[SearchResult]:
+    async def search(self, query: str, limit: int) -> List[Paper]:
         headers = {
             "X-ELS-APIKey": self.api_key,
             "Accept": "application/json",
@@ -61,10 +62,10 @@ class ScopusSearch(BaseSearch):
             else:
                 await asyncio.sleep(0.2)
 
-    def _parse_results(self, data: dict) -> List[SearchResult]:
+    def _parse_results(self, data: dict) -> List[Paper]:
         results = []
         for entry in data.get("search-results", {}).get("entry", []):
-            result = SearchResult(
+            result = Paper(
                 doi=entry.get("prism:doi", ""),
                 title=entry.get("dc:title", ""),
                 authors=[author.get("authname", "") for author in entry.get("author", [])],

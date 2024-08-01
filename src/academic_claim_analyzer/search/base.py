@@ -1,24 +1,12 @@
 # src/academic_claim_analyzer/search/base.py
 
 from abc import ABC, abstractmethod
-from typing import List, Optional
-from dataclasses import dataclass, field
-
-@dataclass
-class SearchResult:
-    doi: str
-    title: str
-    authors: List[str]
-    year: int
-    abstract: Optional[str] = None
-    pdf_link: Optional[str] = None
-    source: str = ""
-    full_text: Optional[str] = None  # Add full_text field
-    metadata: dict = field(default_factory=dict)
+from typing import List
+from ..models import Paper
 
 class BaseSearch(ABC):
     @abstractmethod
-    async def search(self, query: str, limit: int) -> List[SearchResult]:
+    async def search(self, query: str, limit: int) -> List[Paper]:
         """
         Perform a search using the given query and return a list of search results.
 
@@ -27,6 +15,6 @@ class BaseSearch(ABC):
             limit (int): The maximum number of results to return.
 
         Returns:
-            List[SearchResult]: A list of search results.
+            List[Paper]: A list of search results.
         """
         pass

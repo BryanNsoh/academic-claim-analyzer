@@ -1,7 +1,7 @@
 # src/academic_claim_analyzer/models.py
 
 from dataclasses import dataclass, field
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from datetime import datetime
 
 @dataclass
@@ -16,10 +16,11 @@ class Paper:
     authors: List[str]
     year: int
     doi: str
-    abstract: str
-    source: str
-    bibtex: str
-    full_text: str = ""
+    abstract: Optional[str] = None
+    source: str = ""
+    full_text: Optional[str] = None
+    pdf_link: Optional[str] = None
+    bibtex: Optional[str] = None
     metadata: Dict[str, Any] = field(default_factory=dict)
 
 @dataclass

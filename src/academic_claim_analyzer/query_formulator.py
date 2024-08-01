@@ -1,5 +1,9 @@
 # src/academic_claim_analyzer/query_formulator.py
 
+from typing import List
+import json
+from async_llm_handler import LLMHandler
+
 SCOPUS_SEARCH_GUIDE = """
 Syntax and Operators
 
@@ -93,15 +97,15 @@ You are tasked with generating optimized search queries to find relevant researc
 
 1. Review the following point that needs to be addressed by the literature search:
 <point_content>
-{{POINT_CONTENT}}
+{POINT_CONTENT}
 </point_content>
 
 2. Consider the following search guidance:
 <search_guidance>
-{{SEARCH_GUIDANCE}}
+{SEARCH_GUIDANCE}
 </search_guidance>
 
-3. Generate {{NUM_QUERIES}} highly optimized search queries that would surface the most relevant, insightful, and comprehensive set of research articles to shed light on various aspects of the given point. Your queries should:
+3. Generate {NUM_QUERIES} highly optimized search queries that would surface the most relevant, insightful, and comprehensive set of research articles to shed light on various aspects of the given point. Your queries should:
 
 - Directly address the key issues and nuances of the point content
 - Demonstrate creativity and variety to capture different dimensions of the topic
@@ -118,7 +122,7 @@ You are tasked with generating optimized search queries to find relevant researc
   ...
 ]
 
-Replace query_1, query_2, etc. with your actual search queries. The number of queries should match {{NUM_QUERIES}}.
+Replace query_1, query_2, etc. with your actual search queries. The number of queries should match {NUM_QUERIES}.
 
 5. If the search guidance specifies a particular platform (e.g., Scopus, Web of Science), ensure your queries are formatted appropriately for that platform.
 
@@ -130,18 +134,40 @@ Generate the list of search queries now, following the instructions above.
 
 
 
-from typing import List
-
-def formulate_queries(claim: str, num_queries: int) -> List[str]:
+async def formulate_queries(claim: str, num_queries: int, query_type: str) -> List[str]:
     """
     Generate search queries based on the given claim.
 
     Args:
         claim (str): The claim to generate queries for.
         num_queries (int): The number of queries to generate.
+        query_type (str): The type of query to generate ('scopus' or 'openalex').
 
     Returns:
         List[str]: A list of generated search queries.
     """
-    # Implementation details will be added later
-    pass
+    handler = LLMHandler()
+
+    if query_type.lower() == 'scopus':
+        search_guidance = SCOPUS_SEARCH_GUIDE
+    elif query_type.lower() == 'openalex':
+        search_guidance = OPENALEX_SEARCH_GUIDE
+    else:
+        raise ValueError(f"Unsupported query type: {query_type}")
+
+    prompt = GENERATE_QUERIES.format(
+        point_content=claim,
+        search_guidance=search_guidance,
+        num_queries=num_queries,
+        query_type=query_type
+    )
+
+    response = await handler.query(prompt, model="gpt_4o_mini", sync=False)
+    
+    try:
+        queries = json.loads(response)
+        if not isinstance(queries, list) or len(queries) != num_queries:
+            raise ValueError("Invalid response format")
+        return queries
+    except json.JSONDecodeError:
+        raise ValueError("Failed to parse the response as JSON")

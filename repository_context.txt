@@ -170,14 +170,185 @@ if __name__ == "__main__":
         <name>models.py</name>
         <path>src\academic_claim_analyzer\models.py</path>
         <content>
+# src/academic_claim_analyzer/models.py
 
+from dataclasses import dataclass
+from typing import List
+
+@dataclass
+class Paper:
+    title: str
+    authors: List[str]
+    year: int
+    doi: str
+    bibtex: str
+    full_text: str = ""
+
+@dataclass
+class RankedPaper(Paper):
+    relevant_quotes: List[str]
+    analysis: str
+    rank: int
+    
+    
         </content>
     </file>
     <file>
         <name>paper_ranker.py</name>
         <path>src\academic_claim_analyzer\paper_ranker.py</path>
         <content>
+# src/academic_claim_analyzer/paper_ranker.py
 
+"""
+This module contains the functions for ranking papers based on their relevance to a given claim.
+
+The ranking algorithm is as follows:
+To simplify the plan while maintaining output quality, we need to identify which components contribute the most to the robustness and accuracy of the results. We can streamline the process by focusing on the most impactful elements and eliminating steps that add complexity without significantly improving the outcome.
+
+### Simplified Plan: Shuffled Group Ranking with Averaged Scoring
+
+### Key Components to Retain:
+1. **Clipping Papers**: Essential for ensuring manageable text lengths.
+2. **Initial Group Comparisons**: Necessary for creating an initial ranking.
+3. **Adaptive Shuffling**: Ensures diverse comparisons and reduces bias.
+4. **Final Scoring and Selection**: Critical for determining the top papers.
+
+### Components to Remove:
+1. **Stratified Group Formation**: While helpful, the benefits of stratified sampling are marginal compared to random grouping when multiple rounds of shuffling are used.
+2. **Weighted Scoring System**: The improvement from weighting scores is minimal compared to the complexity it adds. Simple averaging can suffice.
+3. **Detailed Preprocessing for Relevant Sections**: Using the full text without detailed preprocessing for relevant sections simplifies implementation without a significant loss in quality, especially when using the full text within the 9,000-word limit.
+
+### Final Simplified Plan:
+
+#### Step-by-Step Process:
+
+### Overview:
+1. **Clipping Papers**: Ensure papers are clipped to a manageable length.
+2. **Initial Group Comparisons**: Rank groups of papers.
+3. **Adaptive Shuffling and Re-Comparison**: Shuffle and re-rank papers to ensure diverse comparisons.
+4. **Final Selection**: Rank papers based on averaged scores and select the top N.
+
+#### Step 1: Preprocessing - Clipping Papers
+
+**Objective**: Reduce the length of each paper to a maximum of 9,000 words to ensure that the comparison text is manageable.
+
+1. **Clip Papers**: 
+   - Use a function to clip each paper to 9,000 words.
+   - This ensures the text remains within the LLM's context window and focuses on the most relevant content.
+
+#### Step 2: Initial Group Comparisons
+
+**Objective**: Form initial groups of papers and rank them.
+
+1. **Form Groups**:
+   - Divide the clipped papers into groups of four.
+
+2. **Comparison and Ranking**:
+   - **Prompt**: "Rank these four papers from most to least relevant to the query: Paper A (summary/abstract), Paper B (summary/abstract), Paper C (summary/abstract), Paper D (summary/abstract)."
+   - **Action**: The LLM ranks the four papers in one API call.
+   - **Scoring**: Assign scores based on the rank within each group (4 points for the top paper, 3 for the second, 2 for the third, 1 for the fourth).
+
+3. **Repeat for All Groups**:
+   - Continue this process for all initial groups of four.
+
+#### Step 3: Adaptive Shuffling and Re-Comparison
+
+**Objective**: Ensure diverse comparisons by shuffling papers and re-ranking them in multiple rounds.
+
+1. **Shuffle Papers**:
+   - Randomly reshuffle the papers to form new groups, ensuring diversity and avoiding repeated groupings as much as possible.
+
+2. **New Group Comparisons**:
+   - Form new groups of four and repeat the comparison and ranking process.
+   - Use the same ranking prompt as in Step 2.
+
+3. **Repeat and Average**:
+   - Perform multiple rounds of shuffling and comparisons (e.g., 3-5 rounds).
+   - Average the scores for each paper across all rounds to get a final relevance score.
+
+#### Step 4: Final Selection
+
+**Objective**: Rank papers based on averaged scores and select the top N papers.
+
+1. **Rank Based on Averaged Scores**:
+   - Rank the papers based on their averaged scores from all comparison rounds.
+
+2. **Select Top N Papers**:
+   - Choose the top N papers based on the final ranking.
+
+### Example Workflow for 20 Papers:
+
+1. **Clipping Papers**:
+   - Clip each of the 20 papers to a maximum of 9,000 words.
+
+2. **Initial Group Comparisons**:
+   - **Form Groups**: 20 papers, groups of 4 → 5 groups.
+   - **API Calls**: 5 calls (each call ranks 4 papers).
+
+3. **Shuffle and Re-Compare**:
+   - **Shuffle**: Randomly reshuffle papers into new groups.
+   - **Repeat Comparisons**: Perform 3 rounds of shuffling and comparisons.
+   - **API Calls per Round**: 5 calls (each call ranks 4 papers).
+   - **Total API Calls for Shuffling**: 3 rounds × 5 calls = 15 calls.
+
+4. **Final Scoring and Selection**:
+   - **Average Scores**: Aggregate and average scores from all rounds.
+   - **Select Top Papers**: Based on final averaged scores.
+
+### API Call Analysis for Different Numbers of Papers:
+
+#### For 10 Papers:
+- **Initial Group Comparisons**: \( \frac{10}{4} = 2.5 \) (round up to 3 groups) → 3 API calls.
+- **Shuffling Rounds**: 3 rounds × 3 calls = 9 API calls.
+- **Total**: 3 + 9 = 12 API calls.
+- **Ratio**: 12 API calls / 10 papers = 1.2.
+
+#### For 20 Papers:
+- **Initial Group Comparisons**: \( \frac{20}{4} = 5 \) groups → 5 API calls.
+- **Shuffling Rounds**: 3 rounds × 5 calls = 15 API calls.
+- **Total**: 5 + 15 = 20 API calls.
+- **Ratio**: 20 API calls / 20 papers = 1.
+
+#### For 50 Papers:
+- **Initial Group Comparisons**: \( \frac{50}{4} = 12.5 \) (round up to 13 groups) → 13 API calls.
+- **Shuffling Rounds**: 3 rounds × 13 calls = 39 API calls.
+- **Total**: 13 + 39 = 52 API calls.
+- **Ratio**: 52 API calls / 50 papers = 1.04.
+
+### Final Analysis:
+
+**Pros**:
+- **Efficiency**: Significant reduction in API calls compared to pairwise comparisons.
+- **Fairness**: Shuffling and multiple rounds ensure that good and bad papers are fairly compared.
+- **Precision**: Averaging scores across multiple rounds reduces the impact of any single comparison’s bias.
+
+**Cons**:
+- **Complexity**: Reduced from the original plan but still requires implementing shuffling logic.
+- **API Cost**: Though reduced, still involves multiple rounds of comparisons.
+
+### Conclusion:
+
+By focusing on essential elements such as clipping papers, initial group comparisons, adaptive shuffling, and final scoring, we maintain a balance of efficiency, fairness, and precision while minimizing complexity and API calls. This streamlined approach should effectively rank academic papers with a high degree of reliability.
+
+
+"""
+
+from typing import List
+from .models import Paper, RankedPaper
+
+async def rank_papers(papers: List[Paper], claim: str) -> List[RankedPaper]:
+    """
+    Rank the given papers based on their relevance to the claim.
+
+    Args:
+        papers (List[Paper]): The papers to be ranked.
+        claim (str): The claim to rank the papers against.
+
+    Returns:
+        List[RankedPaper]: A list of ranked papers with analysis and relevant quotes.
+    """
+    # Implementation details will be added later
+    pass
         </content>
     </file>
     <file>
@@ -470,7 +641,153 @@ if __name__ == "__main__":
         <name>query_formulator.py</name>
         <path>src\academic_claim_analyzer\query_formulator.py</path>
         <content>
+# src/academic_claim_analyzer/query_formulator.py
 
+SCOPUS_SEARCH_GUIDE = """
+Syntax and Operators
+
+Valid syntax for advanced search queries includes:
+
+Field codes (e.g. TITLE, ABS, KEY, AUTH, AFFIL) to restrict searches to specific parts of documents
+Boolean operators (AND, OR, AND NOT) to combine search terms
+Proximity operators (W/n, PRE/n) to find words within a specified distance - W/n: Finds terms within "n" words of each other, regardless of order. Example: journal W/15 publishing finds articles where "journal" and "publishing" are within two words of each other. - PRE/n: Finds terms in the specified order and within "n" words of each other. Example: data PRE/50 analysis finds articles where "data" appears before "analysis" within three words. - To find terms in the same sentence, use 15. To find terms in the same paragraph, use 50 -
+Quotation marks for loose/approximate phrase searches
+Braces {} for exact phrase searches
+Wildcards (*) to capture variations of search terms
+Invalid syntax includes:
+
+Mixing different proximity operators (e.g. W/n and PRE/n) in the same expression
+Using wildcards or proximity operators with exact phrase searches
+Placing AND NOT before other Boolean operators
+Using wildcards on their own without any search terms
+Ideal Search Structure
+
+An ideal advanced search query should:
+
+Use field codes to focus the search on the most relevant parts of documents
+Combine related concepts using AND and OR
+Exclude irrelevant terms with AND NOT at the end
+Employ quotation marks and braces appropriately for phrase searching
+Include wildcards to capture variations of key terms (while avoiding mixing them with other operators)
+Follow the proper order of precedence for operators
+Complex searches should be built up systematically, with parentheses to group related expressions as needed. The information from the provided documents on syntax rules and operators should be applied rigorously.
+
+** Critical: all double quotes other than the outermost ones should be preceded by a backslash (") to escape them in the JSON format. Failure to do so will result in an error when parsing the JSON string. **
+
+Example Advanced Searches
+
+[
+"TITLE-ABS-KEY(("precision agriculture" OR "precision farming") AND ("machine learning" OR "AI") AND "water")",
+"TITLE-ABS-KEY((iot OR \"internet of things\") AND (irrigation OR watering) AND sensor*)",
+"TITLE-ABS-Key((\"precision farming\" OR \"precision agriculture\") AND (\"deep learning\" OR \"neural networks\") AND \"water\")",
+"TITLE-ABS-KEY((crop W/5 monitor*) AND \"remote sensing\" AND (irrigation OR water*))",
+"TITLE(\"precision irrigation\" OR \"variable rate irrigation\" AND \"machine learning\")"
+]
+
+
+** Critical: all double quotes other than the outermost ones should be preceded by a backslash (") to escape them in the JSON format. Failure to do so will result in an error when parsing the JSON string. **. 
+
+These example searches demonstrate different ways to effectively combine key concepts related to precision agriculture, irrigation, real-time monitoring, IoT, machine learning and related topics using advanced search operators. They make use of field codes, Boolean and proximity operators, phrase searching, and wildcards to construct targeted, comprehensive searches to surface the most relevant research. The topic focus is achieved through carefully chosen search terms covering the desired themes.
+"""
+
+OPENALEX_SEARCH_GUIDE = """
+Syntax and Operators
+Valid syntax for advanced alex search queries includes:
+Using quotation marks %22%22 for exact phrase matches
+Adding a minus sign - before terms to exclude them
+Employing the OR operator in all caps to find pages containing either term
+Using the site%3A operator to limit results to a specific website
+Applying the filetype%3A operator to find specific file formats like PDF, DOC, etc.
+Adding the * wildcard as a placeholder for unknown words
+`
+Invalid syntax includes:
+Putting a plus sign + before words (alex stopped supporting this)
+Using other special characters like %3F, %24, %26, %23, etc. within search terms
+Explicitly using the AND operator (alex's default behavior makes it redundant)
+
+Ideal Search Structure
+An effective alex search query should:
+Start with the most important search terms
+Use specific, descriptive keywords related to irrigation scheduling, management, and precision irrigation
+Utilize exact phrases in %22quotes%22 for specific word combinations
+Exclude irrelevant terms using the - minus sign
+Connect related terms or synonyms with OR
+Apply the * wildcard strategically for flexibility
+Note:
+
+By following these guidelines and using proper URL encoding, you can construct effective and accurate search queries for alex.
+
+Searches should be concise yet precise, following the syntax rules carefully. 
+
+Example Searches
+[
+"https://api.openalex.org/works?search=%22precision+irrigation%22+%2B%22soil+moisture+sensors%22+%2B%22irrigation+scheduling%22&sort=relevance_score:desc&per-page=30",
+"https://api.openalex.org/works?search=%22machine+learning%22+%2B%22irrigation+management%22+%2B%22crop+water+demand+prediction%22&sort=relevance_score:desc&per-page=30",
+"https://api.openalex.org/works?search=%22IoT+sensors%22+%2B%22real-time%22+%2B%22soil+moisture+monitoring%22+%2B%22crop+water+stress%22&sort=relevance_score:desc&per-page=30",
+"https://api.openalex.org/works?search=%22remote+sensing%22+%2B%22vegetation+indices%22+%2B%22irrigation+scheduling%22&sort=relevance_score:desc&per-page=30",
+"https://api.openalex.org/works?search=%22wireless+sensor+networks%22+%2B%22precision+agriculture%22+%2B%22variable+rate+irrigation%22+%2B%22irrigation+automation%22&sort=relevance_score:desc&per-page=30"
+]
+
+These example searches demonstrate how to create targeted, effective alex searches. They focus on specific topics, exclude irrelevant results, allow synonym flexibility, and limit to relevant domains when needed. The search terms are carefully selected to balance relevance and specificity while avoiding being overly restrictive.  By combining relevant keywords, exact phrases, and operators, these searches help generate high-quality results for the given topics.
+"""
+
+GENERATE_QUERIES = """
+You are tasked with generating optimized search queries to find relevant research articles addressing a specific point. Follow these instructions carefully:
+
+1. Review the following point that needs to be addressed by the literature search:
+<point_content>
+{{POINT_CONTENT}}
+</point_content>
+
+2. Consider the following search guidance:
+<search_guidance>
+{{SEARCH_GUIDANCE}}
+</search_guidance>
+
+3. Generate {{NUM_QUERIES}} highly optimized search queries that would surface the most relevant, insightful, and comprehensive set of research articles to shed light on various aspects of the given point. Your queries should:
+
+- Directly address the key issues and nuances of the point content
+- Demonstrate creativity and variety to capture different dimensions of the topic
+- Use precise terminology and logical operators for high-quality results
+- Cover a broad range of potential subtopics, perspectives, and article types related to the point
+- Strictly adhere to any specific requirements provided in the search guidance
+
+4. Provide your response as a list of strings in the following format:
+
+[
+  "query_1",
+  "query_2",
+  "query_3",
+  ...
+]
+
+Replace query_1, query_2, etc. with your actual search queries. The number of queries should match {{NUM_QUERIES}}.
+
+5. If the search guidance specifies a particular platform (e.g., Scopus, Web of Science), ensure your queries are formatted appropriately for that platform.
+
+6. Important: If your queries contain quotation marks, ensure they are properly escaped with a backslash (\") to maintain valid list formatting.
+
+Generate the list of search queries now, following the instructions above.
+"""
+
+
+
+
+from typing import List
+
+def formulate_queries(claim: str, num_queries: int) -> List[str]:
+    """
+    Generate search queries based on the given claim.
+
+    Args:
+        claim (str): The claim to generate queries for.
+        num_queries (int): The number of queries to generate.
+
+    Returns:
+        List[str]: A list of generated search queries.
+    """
+    # Implementation details will be added later
+    pass
         </content>
     </file>
     <file>
@@ -494,7 +811,26 @@ from .main import analyze_claim
         <name>base.py</name>
         <path>src\academic_claim_analyzer\search\base.py</path>
         <content>
+# src/academic_claim_analyzer/search/base.py
 
+from abc import ABC, abstractmethod
+from typing import List
+from ..models import Paper
+
+class BaseSearch(ABC):
+    @abstractmethod
+    async def search(self, query: str, limit: int) -> List[Paper]:
+        """
+        Perform a search using the given query and return a list of papers.
+
+        Args:
+            query (str): The search query.
+            limit (int): The maximum number of papers to return.
+
+        Returns:
+            List[Paper]: A list of Paper objects matching the search query.
+        """
+        pass
         </content>
     </file>
     <file>
@@ -515,6 +851,8 @@ from .main import analyze_claim
         <name>openalex.py</name>
         <path>src\academic_claim_analyzer\search\openalex.py</path>
         <content>
+
+
 
         </content>
     </file>

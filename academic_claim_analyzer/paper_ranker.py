@@ -16,7 +16,10 @@ Analyze the relevance of the following papers to the claim: "{claim}"
 Papers:
 {paper_summaries}
 
-Rank these papers from most to least relevant. Provide a brief explanation for each ranking.
+Rank these papers from most to least relevant based on the following criteria:
+1. Direct relevance to the claim (either supporting or refuting it)
+2. Quality and reliability of the research
+3. Recency and impact of the findings
 
 Your response should be in the following JSON format:
 {{
@@ -30,13 +33,18 @@ Your response should be in the following JSON format:
   ]
 }}
 
-Ensure that each paper is assigned a unique rank from 1 to {num_papers}, where 1 is the most relevant. Return only the valid JSON response. Do not add any extra text or artifacts such as ```json or ``` tags.
+Ensure that each paper is assigned a unique rank from 1 to {num_papers}, where 1 is the most relevant. Provide a concise, technical explanation for each ranking, focusing on how the paper's content directly addresses the claim.
+
+Return only the valid JSON response. Do not add any extra text or artifacts such as ```json or ``` tags.
 """
 
 ANALYSIS_PROMPT = """
-For the following paper, provide a detailed analysis of its relevance to the claim: "{claim}"
+Provide a detailed, technical analysis of the following paper's relevance to the claim: "{claim}"
 
 Paper Title: {title}
+Authors: {authors}
+Publication Year: {year}
+DOI: {doi}
 Abstract: {abstract}
 Full Text: {full_text}
 
@@ -50,7 +58,17 @@ Your response should be in the following JSON format:
   ]
 }}
 
-Provide a thorough analysis and extract up to three relevant quotes that support the paper's relevance to the claim. Return only the valid JSON response. Do not add any extra text or artifacts such as ```json or ``` tags.
+In the analysis:
+1. Evaluate how directly the paper addresses the claim, either supporting or refuting it.
+2. Assess the methodology, sample size, and statistical significance of the findings.
+3. Consider any limitations or potential biases in the study.
+4. Discuss how the paper's findings contribute to the broader understanding of the claim.
+
+Extract exactly three relevant quotes from the paper that best support your analysis. These should be verbatim excerpts that directly relate to the claim.
+
+Ensure your analysis is highly precise, technical, and grounded in the paper's content. Avoid general statements and focus on specific details from the study.
+
+Return only the valid JSON response. Do not add any extra text or artifacts such as ```json or ``` tags.
 """
 
 def create_balanced_groups(papers: List[Paper], min_group_size: int = 2, max_group_size: int = 5) -> List[List[Paper]]:

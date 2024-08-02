@@ -48,13 +48,27 @@ async def _formulate_queries(analysis: ClaimAnalysis) -> None:
         analysis.add_query(query, "scopus")
 
 async def _perform_searches(analysis: ClaimAnalysis) -> None:
-    search_modules = [OpenAlexSearch("bnsoh2@huskers.unl.edu"), ScopusSearch(), CORESearch()]
     search_tasks = []
-    for search_module in search_modules:
-        for query in analysis.queries:
-            search_tasks.append(_search_and_add_results(
-                search_module, query.query, analysis.parameters["papers_per_query"], analysis
-            ))
+    
+    openalex_search = OpenAlexSearch("bnsoh2@huskers.unl.edu")
+    openalex_queries = [q for q in analysis.queries if q.source == "openalex"]
+    for query in openalex_queries:
+        search_tasks.append(_search_and_add_results(
+            openalex_search, query.query, analysis.parameters["papers_per_query"], analysis
+        ))
+    
+    scopus_search = ScopusSearch()
+    scopus_queries = [q for q in analysis.queries if q.source == "scopus"]
+    for query in scopus_queries:
+        search_tasks.append(_search_and_add_results(
+            scopus_search, query.query, analysis.parameters["papers_per_query"], analysis
+        ))
+    
+    core_search = CORESearch()
+    search_tasks.append(_search_and_add_results(
+        core_search, analysis.claim, analysis.parameters["papers_per_query"], analysis
+    ))
+
     await asyncio.gather(*search_tasks)
 
 async def _search_and_add_results(search_module: BaseSearch, query: str, limit: int, analysis: ClaimAnalysis) -> None:

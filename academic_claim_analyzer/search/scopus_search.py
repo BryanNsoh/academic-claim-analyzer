@@ -30,7 +30,8 @@ class ScopusSearch(BaseSearch):
             "X-ELS-APIKey": self.api_key,
             "Accept": "application/json",
         }
-
+        # print the query and limit
+        print(f"Query: {query}, Limit: {limit}")
         params = {
             "query": query,
             "count": limit,

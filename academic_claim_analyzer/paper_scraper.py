@@ -1,7 +1,7 @@
 import asyncio
 import random
 import aiohttp
-from playwright.async_api import async_playwright
+from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
 from fake_useragent import UserAgent
 import logging
 import sys
@@ -51,67 +51,68 @@ class UnifiedWebScraper:
             self.scrape_pdf
         ]
 
-        results = []
+        best_result = ("", 0)
         for method in scraping_methods:
-            content = await method(normalized_url, max_retries)
-            word_count = len(content.split())
-            results.append((content, word_count))
-            if word_count >= min_words:
-                self.logger.info(f"Successfully scraped URL: {normalized_url}")
-                return content
+            self.logger.info(f"Trying method: {method.__name__}")
+            for attempt in range(max_retries):
+                try:
+                    self.logger.info(f"Attempt {attempt + 1} with {method.__name__}")
+                    content = await method(normalized_url)
+                    word_count = len(content.split())
+                    self.logger.info(f"Got {word_count} words from {method.__name__}")
+                    if word_count > best_result[1]:
+                        best_result = (content, word_count)
+                    if word_count >= min_words:
+                        self.logger.info(f"Successfully scraped URL: {normalized_url}")
+                        return content
+                except Exception as e:
+                    self.logger.error(f"Error in {method.__name__} (attempt {attempt + 1}): {str(e)}")
+                if attempt < max_retries - 1:
+                    wait_time = random.uniform(1, 3)
+                    self.logger.info(f"Waiting {wait_time:.2f} seconds before next attempt")
+                    await asyncio.sleep(wait_time)
 
-        # If all methods fail to meet the minimum word count, return the longest result
-        longest_content = max(results, key=lambda x: x[1])[0]
         self.logger.warning(f"Failed to meet minimum word count for URL: {normalized_url}")
-        return longest_content
+        return best_result[0]
 
-    async def scrape_with_requests(self, url, max_retries):
-        for _ in range(max_retries):
-            try:
-                response = requests.get(url, headers={"User-Agent": self.user_agent.random})
-                if response.status_code == 200:
-                    soup = BeautifulSoup(response.content, "html.parser")
-                    main_content = soup.find("div", id="abstract") or soup.find("main") or soup.find("body")
-                    if main_content:
-                        for script in main_content(["script", "style"]):
-                            script.decompose()
-                        return main_content.get_text(separator="\n", strip=True)
-            except Exception as e:
-                self.logger.error(f"Error in scrape_with_requests: {str(e)}")
-            await asyncio.sleep(random.uniform(1, 3))
+    async def scrape_with_requests(self, url):
+        self.logger.info(f"Scraping with requests: {url}")
+        response = requests.get(url, headers={"User-Agent": self.user_agent.random})
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.content, "html.parser")
+            main_content = soup.find("div", id="abstract") or soup.find("main") or soup.find("body")
+            if main_content:
+                for script in main_content(["script", "style"]):
+                    script.decompose()
+                return main_content.get_text(separator="\n", strip=True)
         return ""
 
-    async def scrape_with_playwright(self, url, max_retries):
+    async def scrape_with_playwright(self, url):
+        self.logger.info(f"Scraping with Playwright: {url}")
         if not self.browser:
             await self.initialize()
+        context = await self.browser.new_context(
+            user_agent=self.user_agent.random,
+            viewport={"width": 1920, "height": 1080},
+            ignore_https_errors=True,
+        )
+        page = await context.new_page()
+        try:
+            await page.goto(url, wait_until="networkidle", timeout=90000)  # Increased timeout to 90 seconds
+            content = await self.extract_text_content(page)
+            return content
+        except PlaywrightTimeoutError:
+            self.logger.warning(f"Timeout occurred while loading {url}")
+            return ""
+        finally:
+            await page.close()
 
-        for _ in range(max_retries):
-            try:
-                context = await self.browser.new_context(
-                    user_agent=self.user_agent.random,
-                    viewport={"width": 1920, "height": 1080},
-                    ignore_https_errors=True,
-                )
-                page = await context.new_page()
-                await page.goto(url, wait_until="networkidle", timeout=60000)
-                content = await self.extract_text_content(page)
-                await page.close()
-                return content
-            except Exception as e:
-                self.logger.error(f"Error in scrape_with_playwright: {str(e)}")
-            await asyncio.sleep(random.uniform(1, 3))
-        return ""
-
-    async def scrape_pdf(self, url, max_retries):
-        for _ in range(max_retries):
-            try:
-                async with self.session.get(url) as response:
-                    if response.status == 200:
-                        pdf_bytes = await response.read()
-                        return self.extract_text_from_pdf(pdf_bytes)
-            except Exception as e:
-                self.logger.error(f"Error in scrape_pdf: {str(e)}")
-            await asyncio.sleep(random.uniform(1, 3))
+    async def scrape_pdf(self, url):
+        self.logger.info(f"Scraping PDF: {url}")
+        async with self.session.get(url) as response:
+            if response.status == 200:
+                pdf_bytes = await response.read()
+                return self.extract_text_from_pdf(pdf_bytes)
         return ""
 
     async def extract_text_content(self, page):

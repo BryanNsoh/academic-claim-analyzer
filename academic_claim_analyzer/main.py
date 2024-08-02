@@ -91,7 +91,16 @@ async def main():
     print(f"Claim: {analysis_result.claim}")
     print(f"Number of queries generated: {len(analysis_result.queries)}")
     print(f"Total papers found: {len(analysis_result.search_results)}")
-    print(f"Number of ranked papers: {len(analysis_result.ranked_papers)}")
+    
+    # Add this section to print a summary of all search results
+    print("\nSearch Results Summary:")
+    for i, paper in enumerate(analysis_result.search_results, 1):
+        print(f"\n{i}. Title: {paper.title}")
+        print(f"   Authors: {', '.join(paper.authors)}")
+        print(f"   DOI: {paper.doi}")
+        print(f"   Source: {paper.source}")
+    
+    print(f"\nNumber of ranked papers: {len(analysis_result.ranked_papers)}")
     print("\nTop ranked papers:")
     
     for paper in analysis_result.get_top_papers(analysis_result.parameters["num_papers_to_return"]):

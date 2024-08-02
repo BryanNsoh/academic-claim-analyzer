@@ -134,19 +134,140 @@ By focusing on essential elements such as clipping papers, initial group compari
 
 """
 
-from typing import List
+# academic_claim_analyzer/paper_ranker.py
+
+import asyncio
+import json
+import random
+from typing import List, Dict
 from .models import Paper, RankedPaper
+from async_llm_handler import LLMHandler
+import logging
 
-async def rank_papers(papers: List[Paper], claim: str) -> List[RankedPaper]:
-    """
-    Rank the given papers based on their relevance to the claim.
+logger = logging.getLogger(__name__)
 
-    Args:
-        papers (List[Paper]): The papers to be ranked.
-        claim (str): The claim to rank the papers against.
+# Global variables for prompts
+RANKING_PROMPT = """
+Analyze the relevance of the following papers to the claim: "{claim}"
 
-    Returns:
-        List[RankedPaper]: A list of ranked papers with analysis and relevant quotes.
-    """
-    # Implementation details will be added later
-    pass
+Papers:
+{paper_summaries}
+
+Rank these papers from most to least relevant. Provide a brief explanation for each ranking.
+
+Your response should be in the following JSON format:
+{{
+  "rankings": [
+    {{
+      "paper_id": "string",
+      "rank": integer,
+      "explanation": "string"
+    }},
+    ...
+  ]
+}}
+
+Ensure that each paper is assigned a unique rank from 1 to {num_papers}, where 1 is the most relevant.
+"""
+
+ANALYSIS_PROMPT = """
+For the following paper, provide a detailed analysis of its relevance to the claim: "{claim}"
+
+Paper Title: {title}
+Abstract: {abstract}
+Full Text: {full_text}
+
+Your response should be in the following JSON format:
+{{
+  "analysis": "string",
+  "relevant_quotes": [
+    "string",
+    "string",
+    "string"
+  ]
+}}
+
+Provide a thorough analysis and extract up to three relevant quotes that support the paper's relevance to the claim.
+"""
+
+async def rank_group(handler: LLMHandler, claim: str, papers: List[Paper]) -> List[Dict[str, any]]:
+    """Rank a group of papers using the LLM."""
+    paper_summaries = "\n".join([f"Paper ID: {paper.id}\nTitle: {paper.title}\nAbstract: {paper.abstract[:200]}..." for paper in papers])
+    prompt = RANKING_PROMPT.format(claim=claim, paper_summaries=paper_summaries, num_papers=len(papers))
+    
+    response = await handler.query(prompt, model="gpt_4o_mini", sync=False, max_input_tokens=4000)
+    
+    try:
+        rankings = json.loads(response)['rankings']
+        return rankings
+    except json.JSONDecodeError:
+        logger.error(f"Failed to parse LLM response: {response}")
+        return []
+
+async def analyze_paper(handler: LLMHandler, claim: str, paper: Paper) -> Dict[str, any]:
+    """Analyze a single paper for relevance and extract quotes."""
+    prompt = ANALYSIS_PROMPT.format(claim=claim, title=paper.title, abstract=paper.abstract, full_text=paper.full_text)
+    
+    response = await handler.query(prompt, model="gpt_4o_mini", sync=False, max_input_tokens=4000)
+    
+    try:
+        analysis = json.loads(response)
+        return analysis
+    except json.JSONDecodeError:
+        logger.error(f"Failed to parse LLM response for paper analysis: {response}")
+        return {"analysis": "", "relevant_quotes": []}
+
+async def rank_papers(papers: List[Paper], claim: str, num_rounds: int = 3, top_n: int = 5) -> List[RankedPaper]:
+    """Rank papers based on their relevance to the given claim."""
+    handler = LLMHandler()
+    
+    # Assign unique IDs to papers if not already present
+    for i, paper in enumerate(papers):
+        if not hasattr(paper, 'id'):
+            setattr(paper, 'id', f"paper_{i}")
+    
+    paper_scores = {paper.id: [] for paper in papers}
+    
+    for round in range(num_rounds):
+        logger.info(f"Starting ranking round {round + 1} of {num_rounds}")
+        shuffled_papers = random.sample(papers, len(papers))
+        
+        # Split papers into groups of 5
+        paper_groups = [shuffled_papers[i:i+5] for i in range(0, len(shuffled_papers), 5)]
+        
+        # Rank each group
+        ranking_tasks = [rank_group(handler, claim, group) for group in paper_groups]
+        group_rankings = await asyncio.gather(*ranking_tasks)
+        
+        # Accumulate scores
+        for rankings in group_rankings:
+            for ranking in rankings:
+                paper_id = ranking['paper_id']
+                rank = ranking['rank']
+                score = len(papers) - rank + 1  # Convert rank to score
+                paper_scores[paper_id].append(score)
+    
+    # Calculate average scores
+    average_scores = {paper_id: sum(scores) / len(scores) for paper_id, scores in paper_scores.items()}
+    
+    # Sort papers by average score
+    sorted_papers = sorted(papers, key=lambda p: average_scores[p.id], reverse=True)
+    
+    # Analyze top N papers
+    top_papers = sorted_papers[:top_n]
+    analysis_tasks = [analyze_paper(handler, claim, paper) for paper in top_papers]
+    paper_analyses = await asyncio.gather(*analysis_tasks)
+    
+    # Create RankedPaper objects
+    ranked_papers = []
+    for paper, analysis in zip(top_papers, paper_analyses):
+        ranked_paper = RankedPaper(
+            **{**paper.__dict__},
+            relevance_score=average_scores[paper.id],
+            analysis=analysis['analysis'],
+            relevant_quotes=analysis['relevant_quotes']
+        )
+        ranked_papers.append(ranked_paper)
+    
+    logger.info(f"Completed paper ranking. Top score: {ranked_papers[0].relevance_score:.2f}, Bottom score: {ranked_papers[-1].relevance_score:.2f}")
+    return ranked_papers

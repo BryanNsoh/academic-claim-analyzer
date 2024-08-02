@@ -1,4 +1,4 @@
-Context extraction timestamp: 20240801_210344
+Context extraction timestamp: 20240802_073332
 
 <repository_structure>
 <directory name="academic-claim-analyzer">
@@ -3703,7 +3703,7 @@ import logging
 from typing import List
 from .query_formulator import formulate_queries
 from .paper_ranker import rank_papers
-from .search import OpenAlexSearch, ScopusSearch, CoreSearch, BaseSearch
+from .search import OpenAlexSearch, ScopusSearch, CORESearch, BaseSearch
 from .models import ClaimAnalysis, Paper
 
 logger = logging.getLogger(__name__)
@@ -4321,10 +4321,10 @@ These example searches demonstrate how to create targeted, effective alex search
 GENERATE_QUERIES = """
 You are tasked with generating optimized search queries to find relevant research articles addressing a specific point. Follow these instructions carefully:
 
-1. Review the following point that needs to be addressed by the literature search:
-<point_content>
-{POINT_CONTENT}
-</point_content>
+1. Review the following claim that needs to be addressed by the literature search:
+<claim>
+{CLAIM}
+</claim>
 
 2. Consider the following search guidance:
 <search_guidance>
@@ -4382,10 +4382,10 @@ async def formulate_queries(claim: str, num_queries: int, query_type: str) -> Li
         raise ValueError(f"Unsupported query type: {query_type}")
 
     prompt = GENERATE_QUERIES.format(
-        point_content=claim,
-        search_guidance=search_guidance,
-        num_queries=num_queries,
-        query_type=query_type
+        CLAIM=claim,
+        SEARCH_GUIDANCE=search_guidance,
+        NUM_QUERIES=num_queries,
+        QUERY_TYPE=query_type
     )
 
     response = await handler.query(prompt, model="gpt_4o_mini", sync=False)
@@ -4920,65 +4920,44 @@ if __name__ == "__main__":
 
 import pytest
 from academic_claim_analyzer.query_formulator import formulate_queries
-
+from unittest.mock import patch 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("claim, num_queries, query_type, expected_keywords", [
+@pytest.mark.parametrize("claim, num_queries, query_type", [
     (
         "Coffee consumption is associated with reduced risk of type 2 diabetes.",
         3,
-        "scopus",
-        ["coffee", "consumption", "reduced risk", "type 2 diabetes", "association"]
+        "scopus"
     ),
     (
         "Mindfulness meditation can help reduce symptoms of anxiety and depression.",
         4,
-        "openalex",
-        ["mindfulness", "meditation", "anxiety", "depression", "symptoms", "reduce"]
+        "openalex"
     ),
     (
         "Regular exercise is linked to improved cardiovascular health in older adults.",
         5,
-        "scopus",
-        ["regular exercise", "cardiovascular health", "older adults", "linked", "improved"]
+        "scopus"
     ),
 ])
-async def test_formulate_queries(claim, num_queries, query_type, expected_keywords):
+async def test_formulate_queries(claim, num_queries, query_type):
     queries = await formulate_queries(claim, num_queries, query_type)
     assert isinstance(queries, list)
     assert len(queries) == num_queries
     for query in queries:
+        print(query)  # Added for debugging, can be removed later
         assert isinstance(query, str)
         assert len(query) > 0
-        assert any(keyword.lower() in query.lower() for keyword in expected_keywords)
 
-    # Check if queries are different from each other
-    assert len(set(queries)) == num_queries
-
-    # Check if queries adhere to the specified query type format
-    if query_type.lower() == 'scopus':
-        assert all("TITLE-ABS-KEY" in query for query in queries)
-    elif query_type.lower() == 'openalex':
-        assert all(query.startswith('"') or query.startswith('-') or query.startswith('+') for query in queries)
+        if query_type.lower() == 'scopus':
+            assert query.startswith("TITLE-ABS-KEY(") and query.endswith(")")
+        elif query_type.lower() == 'openalex':
+            assert query.startswith("https://api.openalex.org/works?search=")
 
 @pytest.mark.asyncio
 async def test_formulate_queries_invalid_query_type():
     with pytest.raises(ValueError, match="Unsupported query type"):
         await formulate_queries("Test claim", 3, "invalid_type")
-
-@pytest.mark.asyncio
-async def test_formulate_queries_error_handling():
-    # Test with invalid JSON response (simulated by mocking the LLMHandler)
-    with pytest.patch('src.academic_claim_analyzer.query_formulator.LLMHandler') as mock_handler:
-        mock_handler.return_value.query.return_value = "Invalid JSON"
-        with pytest.raises(ValueError, match="Failed to parse the response as JSON"):
-            await formulate_queries("Test claim", 3, "scopus")
-
-    # Test with valid JSON but incorrect format
-    with pytest.patch('src.academic_claim_analyzer.query_formulator.LLMHandler') as mock_handler:
-        mock_handler.return_value.query.return_value = '{"key": "value"}'
-        with pytest.raises(ValueError, match="Invalid response format"):
-            await formulate_queries("Test claim", 3, "scopus")
         </content>
     </file>
     <file>

@@ -39,12 +39,16 @@ async def _perform_analysis(analysis: ClaimAnalysis) -> None:
     await _rank_papers(analysis)
 
 async def _formulate_queries(analysis: ClaimAnalysis) -> None:
-    queries = await formulate_queries(analysis.claim, analysis.parameters["num_queries"])
-    for query in queries:
-        analysis.add_query(query, "formulator")
+    openalex_queries = await formulate_queries(analysis.claim, analysis.parameters["num_queries"], "openalex")
+    scopus_queries = await formulate_queries(analysis.claim, analysis.parameters["num_queries"], "scopus")
+    
+    for query in openalex_queries:
+        analysis.add_query(query, "openalex")
+    for query in scopus_queries:
+        analysis.add_query(query, "scopus")
 
 async def _perform_searches(analysis: ClaimAnalysis) -> None:
-    search_modules = [OpenAlexSearch("your_email@example.com"), ScopusSearch(), CoreSearch()]
+    search_modules = [OpenAlexSearch("bnsoh2@huskers.unl.edu"), ScopusSearch(), CORESearch()]
     search_tasks = []
     for search_module in search_modules:
         for query in analysis.queries:

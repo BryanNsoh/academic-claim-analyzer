@@ -85,7 +85,6 @@ class ScopusSearch(BaseSearch):
                 authors=[author.get("authname", "") for author in entry.get("author", [])],
                 year=year,
                 abstract=entry.get("dc:description", ""),
-                pdf_link=entry.get("prism:url", ""),  # Using prism:url as a potential full text link
                 source=entry.get("prism:publicationName", ""),
                 metadata={
                     "citation_count": citation_count,

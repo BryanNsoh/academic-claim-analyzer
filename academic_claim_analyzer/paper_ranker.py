@@ -3,14 +3,13 @@
 import asyncio
 import json
 import random
-from typing import List, Dict, Tuple
+from typing import List, Dict
 from .models import Paper, RankedPaper
 from async_llm_handler import LLMHandler
 import logging
 
 logger = logging.getLogger(__name__)
 
-# Global variables for prompts
 RANKING_PROMPT = """
 Analyze the relevance of the following papers to the claim: "{claim}"
 
@@ -31,7 +30,7 @@ Your response should be in the following JSON format:
   ]
 }}
 
-Ensure that each paper is assigned a unique rank from 1 to {num_papers}, where 1 is the most relevant.
+Ensure that each paper is assigned a unique rank from 1 to {num_papers}, where 1 is the most relevant. Return only the valid JSON response. Do not add any extra text or artifacts such as ```json or ``` tags.
 """
 
 ANALYSIS_PROMPT = """
@@ -51,7 +50,7 @@ Your response should be in the following JSON format:
   ]
 }}
 
-Provide a thorough analysis and extract up to three relevant quotes that support the paper's relevance to the claim.
+Provide a thorough analysis and extract up to three relevant quotes that support the paper's relevance to the claim. Return only the valid JSON response. Do not add any extra text or artifacts such as ```json or ``` tags.
 """
 
 def create_balanced_groups(papers: List[Paper], min_group_size: int = 2, max_group_size: int = 5) -> List[List[Paper]]:
@@ -79,44 +78,63 @@ async def rank_group(handler: LLMHandler, claim: str, papers: List[Paper]) -> Li
     paper_summaries = "\n".join([f"Paper ID: {paper.id}\nTitle: {paper.title}\nAbstract: {paper.abstract[:200]}..." for paper in papers])
     prompt = RANKING_PROMPT.format(claim=claim, paper_summaries=paper_summaries, num_papers=len(papers))
     
-    response = await handler.query(prompt, model="gpt_4o_mini", sync=False, max_input_tokens=4000)
-    
     try:
-        rankings = json.loads(response)['rankings']
+        response = await handler.query(prompt, model="gpt_4o_mini", sync=False, max_input_tokens=4000)
+        
+        # print the group rankings intelligently
+        print(f"Group Rankings: {response}") 
+        
+        # Strip the ```json and ``` tags from the response
+        json_str = response.strip().lstrip('```json').rstrip('```')
+        rankings = json.loads(json_str)['rankings']
         if len(rankings) != len(papers):
             logger.warning(f"Incomplete rankings received. Expected {len(papers)}, got {len(rankings)}")
         return rankings
     except json.JSONDecodeError:
         logger.error(f"Failed to parse LLM response: {response}")
         return []
+    except Exception as e:
+        logger.error(f"Error during ranking: {str(e)}")
+        return []
 
 async def analyze_paper(handler: LLMHandler, claim: str, paper: Paper) -> Dict[str, any]:
     """Analyze a single paper for relevance and extract quotes."""
     prompt = ANALYSIS_PROMPT.format(claim=claim, title=paper.title, abstract=paper.abstract, full_text=paper.full_text)
     
-    response = await handler.query(prompt, model="gpt_4o_mini", sync=False, max_input_tokens=4000)
-    
     try:
-        analysis = json.loads(response)
+        response = await handler.query(prompt, model="gpt_4o_mini", sync=False, max_input_tokens=4000)
+        
+        # print the paper analysis intelligently
+        print(f"Paper Analysis: {response}")
+        
+        # Strip the ```json and ``` tags from the response
+        json_str = response.strip().lstrip('```json').rstrip('```')
+        analysis = json.loads(json_str)
         return analysis
     except json.JSONDecodeError:
         logger.error(f"Failed to parse LLM response for paper analysis: {response}")
+        return {"analysis": "", "relevant_quotes": []}
+    except Exception as e:
+        logger.error(f"Error during paper analysis: {str(e)}")
         return {"analysis": "", "relevant_quotes": []}
 
 async def rank_papers(papers: List[Paper], claim: str, num_rounds: int = 3, top_n: int = 5) -> List[RankedPaper]:
     """Rank papers based on their relevance to the given claim."""
     handler = LLMHandler()
     
+    # Filter out papers with no full text or full text shorter than 200 words
+    valid_papers = [paper for paper in papers if paper.full_text and len(paper.full_text.split()) >= 200]
+    
     # Assign unique IDs to papers if not already present
-    for i, paper in enumerate(papers):
+    for i, paper in enumerate(valid_papers):
         if not hasattr(paper, 'id'):
             setattr(paper, 'id', f"paper_{i}")
     
-    paper_scores: Dict[str, List[float]] = {paper.id: [] for paper in papers}
+    paper_scores: Dict[str, List[float]] = {paper.id: [] for paper in valid_papers}
     
     for round in range(num_rounds):
         logger.info(f"Starting ranking round {round + 1} of {num_rounds}")
-        shuffled_papers = random.sample(papers, len(papers))
+        shuffled_papers = random.sample(valid_papers, len(valid_papers))
         
         # Create balanced groups
         paper_groups = create_balanced_groups(shuffled_papers)
@@ -145,7 +163,7 @@ async def rank_papers(papers: List[Paper], claim: str, num_rounds: int = 3, top_
             average_scores[paper_id] = 0
     
     # Sort papers by average score
-    sorted_papers = sorted(papers, key=lambda p: average_scores[p.id], reverse=True)
+    sorted_papers = sorted(valid_papers, key=lambda p: average_scores[p.id], reverse=True)
     
     # Analyze top N papers
     top_papers = sorted_papers[:top_n]
@@ -155,8 +173,10 @@ async def rank_papers(papers: List[Paper], claim: str, num_rounds: int = 3, top_
     # Create RankedPaper objects
     ranked_papers = []
     for paper, analysis in zip(top_papers, paper_analyses):
+        paper_dict = paper.__dict__.copy()
+        paper_dict.pop('id', None)  # Remove 'id' from the dictionary
         ranked_paper = RankedPaper(
-            **{**paper.__dict__},
+            **paper_dict,
             relevance_score=average_scores[paper.id],
             analysis=analysis['analysis'],
             relevant_quotes=analysis['relevant_quotes']

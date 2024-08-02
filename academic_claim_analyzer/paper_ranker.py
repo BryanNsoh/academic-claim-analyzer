@@ -21,6 +21,8 @@ Rank these papers from most to least relevant based on the following criteria:
 2. Quality and reliability of the research
 3. Recency and impact of the findings
 
+Focus primarily on the full text content of each paper. Other metadata (title, authors, etc.) may be missing or incomplete, but should not significantly affect your ranking if the full text is present.
+
 Your response should be in the following JSON format:
 {{
   "rankings": [
@@ -41,12 +43,14 @@ Return only the valid JSON response. Do not add any extra text or artifacts such
 ANALYSIS_PROMPT = """
 Provide a detailed, technical analysis of the following paper's relevance to the claim: "{claim}"
 
-Paper Title: {title}
+Paper Full Text: {full_text}
+
+Additional metadata (if available):
+Title: {title}
 Authors: {authors}
 Publication Year: {year}
 DOI: {doi}
 Abstract: {abstract}
-Full Text: {full_text}
 
 Your response should be in the following JSON format:
 {{
@@ -93,16 +97,20 @@ def create_balanced_groups(papers: List[Paper], min_group_size: int = 2, max_gro
 
 async def rank_group(handler: LLMHandler, claim: str, papers: List[Paper]) -> List[Dict[str, any]]:
     """Rank a group of papers using the LLM."""
-    paper_summaries = "\n".join([f"Paper ID: {paper.id}\nTitle: {paper.title}\nAbstract: {paper.abstract[:200]}..." for paper in papers])
+    paper_summaries = "\n".join([
+        f"Paper ID: {paper.id}\n"
+        f"Full Text: {getattr(paper, 'full_text', 'N/A')[:500]}...\n"
+        f"Title: {getattr(paper, 'title', 'N/A')}\n"
+        f"Abstract: {getattr(paper, 'abstract', 'N/A')[:200]}..."
+        for paper in papers
+    ])
     prompt = RANKING_PROMPT.format(claim=claim, paper_summaries=paper_summaries, num_papers=len(papers))
     
     try:
         response = await handler.query(prompt, model="gpt_4o_mini", sync=False, max_input_tokens=4000)
         
-        # print the group rankings intelligently
         print(f"Group Rankings: {response}") 
         
-        # Strip the ```json and ``` tags from the response
         json_str = response.strip().lstrip('```json').rstrip('```')
         rankings = json.loads(json_str)['rankings']
         if len(rankings) != len(papers):
@@ -117,15 +125,21 @@ async def rank_group(handler: LLMHandler, claim: str, papers: List[Paper]) -> Li
 
 async def analyze_paper(handler: LLMHandler, claim: str, paper: Paper) -> Dict[str, any]:
     """Analyze a single paper for relevance and extract quotes."""
-    prompt = ANALYSIS_PROMPT.format(claim=claim, title=paper.title, abstract=paper.abstract, full_text=paper.full_text)
+    prompt = ANALYSIS_PROMPT.format(
+        claim=claim,
+        full_text=getattr(paper, 'full_text', 'N/A'),
+        title=getattr(paper, 'title', 'N/A'),
+        authors=getattr(paper, 'authors', 'N/A'),
+        year=getattr(paper, 'year', 'N/A'),
+        doi=getattr(paper, 'doi', 'N/A'),
+        abstract=getattr(paper, 'abstract', 'N/A')
+    )
     
     try:
         response = await handler.query(prompt, model="gpt_4o_mini", sync=False, max_input_tokens=4000)
         
-        # print the paper analysis intelligently
         print(f"Paper Analysis: {response}")
         
-        # Strip the ```json and ``` tags from the response
         json_str = response.strip().lstrip('```json').rstrip('```')
         analysis = json.loads(json_str)
         return analysis
@@ -141,18 +155,30 @@ async def rank_papers(papers: List[Paper], claim: str, num_rounds: int = 3, top_
     handler = LLMHandler()
     
     # Filter out papers with no full text or full text shorter than 200 words
-    valid_papers = [paper for paper in papers if paper.full_text and len(paper.full_text.split()) >= 200]
+    valid_papers = [paper for paper in papers if getattr(paper, 'full_text', '') and len(getattr(paper, 'full_text', '').split()) >= 200]
+    
+    # Remove duplicates based on DOI or title
+    unique_papers = []
+    seen_dois = set()
+    seen_titles = set()
+    for paper in valid_papers:
+        if getattr(paper, 'doi', None) and paper.doi not in seen_dois:
+            seen_dois.add(paper.doi)
+            unique_papers.append(paper)
+        elif getattr(paper, 'title', None) and paper.title not in seen_titles:
+            seen_titles.add(paper.title)
+            unique_papers.append(paper)
     
     # Assign unique IDs to papers if not already present
-    for i, paper in enumerate(valid_papers):
+    for i, paper in enumerate(unique_papers):
         if not hasattr(paper, 'id'):
             setattr(paper, 'id', f"paper_{i}")
     
-    paper_scores: Dict[str, List[float]] = {paper.id: [] for paper in valid_papers}
+    paper_scores: Dict[str, List[float]] = {paper.id: [] for paper in unique_papers}
     
     for round in range(num_rounds):
         logger.info(f"Starting ranking round {round + 1} of {num_rounds}")
-        shuffled_papers = random.sample(valid_papers, len(valid_papers))
+        shuffled_papers = random.sample(unique_papers, len(unique_papers))
         
         # Create balanced groups
         paper_groups = create_balanced_groups(shuffled_papers)
@@ -181,7 +207,7 @@ async def rank_papers(papers: List[Paper], claim: str, num_rounds: int = 3, top_
             average_scores[paper_id] = 0
     
     # Sort papers by average score
-    sorted_papers = sorted(valid_papers, key=lambda p: average_scores[p.id], reverse=True)
+    sorted_papers = sorted(unique_papers, key=lambda p: average_scores[p.id], reverse=True)
     
     # Analyze top N papers
     top_papers = sorted_papers[:top_n]

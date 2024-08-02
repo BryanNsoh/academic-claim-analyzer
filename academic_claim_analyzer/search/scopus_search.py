@@ -30,8 +30,7 @@ class ScopusSearch(BaseSearch):
             "X-ELS-APIKey": self.api_key,
             "Accept": "application/json",
         }
-        # print the query and limit
-        print(f"Query: {query}, Limit: {limit}")
+        
         params = {
             "query": query,
             "count": limit,
@@ -68,16 +67,28 @@ class ScopusSearch(BaseSearch):
         results = []
         scraper = UnifiedWebScraper(session)
         for entry in data.get("search-results", {}).get("entry", []):
+            try:
+                year = int(entry.get("prism:coverDate", "").split("-")[0])
+            except (ValueError, IndexError):
+                year = None
+                logger.warning(f"Failed to parse year from coverDate: {entry.get('prism:coverDate')}")
+
+            try:
+                citation_count = int(entry.get("citedby-count", 0))
+            except ValueError:
+                citation_count = 0
+                logger.warning(f"Failed to parse citation count: {entry.get('citedby-count')}")
+
             result = Paper(
                 doi=entry.get("prism:doi", ""),
                 title=entry.get("dc:title", ""),
                 authors=[author.get("authname", "") for author in entry.get("author", [])],
-                year=int(entry.get("prism:coverDate", "").split("-")[0]),
+                year=year,
                 abstract=entry.get("dc:description", ""),
                 pdf_link=entry.get("prism:url", ""),  # Using prism:url as a potential full text link
                 source=entry.get("prism:publicationName", ""),
                 metadata={
-                    "citation_count": int(entry.get("citedby-count", 0)),
+                    "citation_count": citation_count,
                     "scopus_id": entry.get("dc:identifier", ""),
                     "eid": entry.get("eid", "")
                 }

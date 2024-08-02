@@ -95,10 +95,10 @@ These example searches demonstrate how to create targeted, effective alex search
 GENERATE_QUERIES = """
 You are tasked with generating optimized search queries to find relevant research articles addressing a specific point. Follow these instructions carefully:
 
-1. Review the following point that needs to be addressed by the literature search:
-<point_content>
-{POINT_CONTENT}
-</point_content>
+1. Review the following claim that needs to be addressed by the literature search:
+<claim>
+{CLAIM}
+</claim>
 
 2. Consider the following search guidance:
 <search_guidance>
@@ -156,10 +156,10 @@ async def formulate_queries(claim: str, num_queries: int, query_type: str) -> Li
         raise ValueError(f"Unsupported query type: {query_type}")
 
     prompt = GENERATE_QUERIES.format(
-        point_content=claim,
-        search_guidance=search_guidance,
-        num_queries=num_queries,
-        query_type=query_type
+        CLAIM=claim,
+        SEARCH_GUIDANCE=search_guidance,
+        NUM_QUERIES=num_queries,
+        QUERY_TYPE=query_type
     )
 
     response = await handler.query(prompt, model="gpt_4o_mini", sync=False)

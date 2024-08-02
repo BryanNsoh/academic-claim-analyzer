@@ -1,4 +1,4 @@
-# src/academic_claim_analyzer/search/openalex_search.py
+# academic_claim_analyzer/search/openalex_search.py
 
 import aiohttp
 import asyncio
@@ -6,6 +6,7 @@ import urllib.parse
 from typing import List
 from .base import BaseSearch
 from ..models import Paper
+from ..paper_scraper import UnifiedWebScraper
 import logging
 
 logger = logging.getLogger(__name__)
@@ -27,7 +28,7 @@ class OpenAlexSearch(BaseSearch):
                     async with session.get(search_url) as response:
                         if response.status == 200:
                             data = await response.json()
-                            return self._parse_results(data)
+                            return await self._parse_results(data, session)
                         else:
                             logger.error(f"Unexpected status code from OpenAlex API: {response.status}")
                             return []
@@ -35,8 +36,9 @@ class OpenAlexSearch(BaseSearch):
                     logger.error(f"Error occurred while making request to OpenAlex API: {str(e)}")
                     return []
 
-    def _parse_results(self, data: dict) -> List[Paper]:
+    async def _parse_results(self, data: dict, session: aiohttp.ClientSession) -> List[Paper]:
         results = []
+        scraper = UnifiedWebScraper(session)
         for work in data.get("results", []):
             result = Paper(
                 doi=work.get("doi", ""),
@@ -51,5 +53,13 @@ class OpenAlexSearch(BaseSearch):
                     "openalex_id": work.get("id", "")
                 }
             )
+            try:
+                if result.doi:
+                    result.full_text = await scraper.scrape(f"https://doi.org/{result.doi}")
+                if not result.full_text and result.pdf_link:
+                    result.full_text = await scraper.scrape(result.pdf_link)
+            except Exception as e:
+                logger.error(f"Error scraping full text for {result.doi or result.pdf_link}: {str(e)}")
             results.append(result)
+        await scraper.close()
         return results

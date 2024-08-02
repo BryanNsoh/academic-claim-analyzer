@@ -1,4 +1,4 @@
-# src/academic_claim_analyzer/models.py
+# academic_claim_analyzer/models.py
 
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
@@ -25,10 +25,10 @@ class Paper:
 
 @dataclass
 class RankedPaper(Paper):
-    relevance_score: float
-    relevant_quotes: List[str]
-    analysis: str
-
+    relevance_score: float = None
+    relevant_quotes: List[str] = field(default_factory=list)
+    analysis: str = ""
+        
 @dataclass
 class ClaimAnalysis:
     claim: str

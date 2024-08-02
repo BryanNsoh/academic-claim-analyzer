@@ -1,4 +1,4 @@
-Context extraction timestamp: 20240801_195355
+Context extraction timestamp: 20240801_210344
 
 <repository_structure>
 <directory name="academic-claim-analyzer">
@@ -22,6 +22,11 @@ import os
 sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
 
         </content>
+    </file>
+    <file>
+        <name>cookies.json</name>
+        <path>cookies.json</path>
+        <content>Full content not provided</content>
     </file>
     <file>
         <name>LICENSE</name>
@@ -112,6 +117,11 @@ if __name__ == "__main__":
     <file>
         <name>requirements.txt</name>
         <path>requirements.txt</path>
+        <content>Full content not provided</content>
+    </file>
+    <file>
+        <name>scraper.log</name>
+        <path>scraper.log</path>
         <content>Full content not provided</content>
     </file>
     <file>
@@ -3645,28 +3655,58 @@ def load_toml_or_inline_map(data: str | None) -> dict[str, Any]:
         </content>
     </file>
                 </directory>
+    <directory name=".pytest_cache">
+    <file>
+        <name>.gitignore</name>
+        <path>.pytest_cache\.gitignore</path>
+        <content>Full content not provided</content>
+    </file>
+    <file>
+        <name>CACHEDIR.TAG</name>
+        <path>.pytest_cache\CACHEDIR.TAG</path>
+        <content>Full content not provided</content>
+    </file>
+    <file>
+        <name>README.md</name>
+        <path>.pytest_cache\README.md</path>
+        <content>Full content not provided</content>
+    </file>
+    </directory>
+        <directory name="v">
+        </directory>
+            <directory name="cache">
+    <file>
+        <name>lastfailed</name>
+        <path>.pytest_cache\v\cache\lastfailed</path>
+        <content>Full content not provided</content>
+    </file>
+    <file>
+        <name>nodeids</name>
+        <path>.pytest_cache\v\cache\nodeids</path>
+        <content>Full content not provided</content>
+    </file>
+    <file>
+        <name>stepwise</name>
+        <path>.pytest_cache\v\cache\stepwise</path>
+        <content>Full content not provided</content>
+    </file>
+            </directory>
     <directory name="academic_claim_analyzer">
     <file>
         <name>main.py</name>
         <path>academic_claim_analyzer\main.py</path>
         <content>
-# src/academic_claim_analyzer/main.py
-"""
-Main orchestrator for the Academic Claim Analyzer.
-"""
+# academic_claim_analyzer/main.py
 
 import asyncio
 import logging
-from typing import List, Type
+from typing import List
 from .query_formulator import formulate_queries
-from .paper_scraper import scrape_papers
 from .paper_ranker import rank_papers
 from .search import OpenAlexSearch, ScopusSearch, CoreSearch, BaseSearch
-from .models import ClaimAnalysis, RankedPaper
+from .models import ClaimAnalysis, Paper
 
 logger = logging.getLogger(__name__)
-
-SEARCH_MODULES: List[Type[BaseSearch]] = [OpenAlexSearch, ScopusSearch, CoreSearch]
 
 async def analyze_claim(
     claim: str,
@@ -3674,19 +3714,6 @@ async def analyze_claim(
     papers_per_query: int = 5,
     num_papers_to_return: int = 1
 ) -> ClaimAnalysis:
-    """
-    Analyze a given claim by searching for relevant papers, ranking them,
-    and returning the top-ranked papers with supporting evidence.
-
-    Args:
-        claim (str): The claim to be analyzed.
-        num_queries (int): Number of search queries to generate.
-        papers_per_query (int): Number of papers to retrieve per query.
-        num_papers_to_return (int): Number of top-ranked papers to return.
-
-    Returns:
-        ClaimAnalysis: Analysis result containing top-ranked papers with supporting evidence.
-    """
     analysis = ClaimAnalysis(
         claim=claim,
         parameters={
@@ -3705,29 +3732,19 @@ async def analyze_claim(
     return analysis
 
 async def _perform_analysis(analysis: ClaimAnalysis) -> None:
-    """
-    Perform the actual analysis steps.
-    """
     await _formulate_queries(analysis)
     await _perform_searches(analysis)
-    await _scrape_papers(analysis)
     await _rank_papers(analysis)
 
 async def _formulate_queries(analysis: ClaimAnalysis) -> None:
-    """
-    Formulate queries based on the claim.
-    """
-    queries = formulate_queries(analysis.claim, analysis.parameters["num_queries"])
+    queries = await formulate_queries(analysis.claim, analysis.parameters["num_queries"])
     for query in queries:
         analysis.add_query(query, "formulator")
 
 async def _perform_searches(analysis: ClaimAnalysis) -> None:
-    """
-    Perform searches using all search modules.
-    """
+    search_modules = [OpenAlexSearch("your_email@example.com"), ScopusSearch(), CoreSearch()]
     search_tasks = []
-    for search_module_class in SEARCH_MODULES:
-        search_module = search_module_class()
+    for search_module in search_modules:
         for query in analysis.queries:
             search_tasks.append(_search_and_add_results(
                 search_module, query.query, analysis.parameters["papers_per_query"], analysis
@@ -3735,9 +3752,6 @@ async def _perform_searches(analysis: ClaimAnalysis) -> None:
     await asyncio.gather(*search_tasks)
 
 async def _search_and_add_results(search_module: BaseSearch, query: str, limit: int, analysis: ClaimAnalysis) -> None:
-    """
-    Perform a search and add results to the analysis.
-    """
     try:
         results = await search_module.search(query, limit)
         for paper in results:
@@ -3745,16 +3759,7 @@ async def _search_and_add_results(search_module: BaseSearch, query: str, limit: 
     except Exception as e:
         logger.error(f"Error during search with {search_module.__class__.__name__}: {str(e)}")
 
-async def _scrape_papers(analysis: ClaimAnalysis) -> None:
-    """
-    Scrape full text content for all papers in the analysis.
-    """
-    analysis.search_results = await scrape_papers(analysis.search_results)
-
 async def _rank_papers(analysis: ClaimAnalysis) -> None:
-    """
-    Rank the papers based on relevance to the claim.
-    """
     ranked_papers = await rank_papers(analysis.search_results, analysis.claim)
     for paper in ranked_papers:
         analysis.add_ranked_paper(paper)
@@ -3788,7 +3793,7 @@ if __name__ == "__main__":
         <name>models.py</name>
         <path>academic_claim_analyzer\models.py</path>
         <content>
-# src/academic_claim_analyzer/models.py
+# academic_claim_analyzer/models.py
 
 from dataclasses import dataclass, field
 from typing import List, Dict, Any, Optional
@@ -3815,10 +3820,10 @@ class Paper:
 
 @dataclass
 class RankedPaper(Paper):
-    relevance_score: float
-    relevant_quotes: List[str]
-    analysis: str
-
+    relevance_score: float = None
+    relevant_quotes: List[str] = field(default_factory=list)
+    analysis: str = ""
+        
 @dataclass
 class ClaimAnalysis:
     claim: str
@@ -4007,7 +4012,7 @@ async def rank_papers(papers: List[Paper], claim: str) -> List[RankedPaper]:
 import asyncio
 import random
 import aiohttp
-from playwright.async_api import async_playwright
+from playwright.async_api import async_playwright, TimeoutError as PlaywrightTimeoutError
 from fake_useragent import UserAgent
 import logging
 import sys
@@ -4015,9 +4020,9 @@ import json
 import fitz  # PyMuPDF
 from bs4 import BeautifulSoup
 import requests
-from urllib.parse import urlparse, urljoin
+from urllib.parse import urlparse
 
-class WebScraper:
+class UnifiedWebScraper:
     def __init__(self, session, max_concurrent_tasks=5):
         self.semaphore = asyncio.Semaphore(max_concurrent_tasks)
         self.user_agent = UserAgent()
@@ -4040,173 +4045,86 @@ class WebScraper:
             self.logger.info("Browser closed")
 
     def normalize_url(self, url):
-        if url.startswith("10."):
-            return f"https://doi.org/{url}"
-        elif url.startswith("doi:"):
-            return f"https://doi.org/{url[4:]}"
-        elif not url.startswith("http"):
-            return f"https://{url}"
+        if url.startswith("10.") or url.startswith("doi:"):
+            return f"https://doi.org/{url.replace('doi:', '')}"
+        parsed = urlparse(url)
+        if not parsed.scheme:
+            return f"http://{url}"
         return url
 
-    async def scrape_url(self, url, max_retries=3):
+    async def scrape(self, url, min_words=700, max_retries=3):
         normalized_url = self.normalize_url(url)
         self.logger.info(f"Attempting to scrape URL: {normalized_url}")
-        
-        if normalized_url.lower().endswith(".pdf"):
-            return await self.scrape_pdf(normalized_url, max_retries)
-        else:
-            return await self.scrape_web_page(normalized_url, max_retries)
 
-    async def scrape_web_page(self, url, max_retries=3):
+        scraping_methods = [
+            self.scrape_with_requests,
+            self.scrape_with_playwright,
+            self.scrape_pdf
+        ]
+
+        best_result = ("", 0)
+        for method in scraping_methods:
+            self.logger.info(f"Trying method: {method.__name__}")
+            for attempt in range(max_retries):
+                try:
+                    self.logger.info(f"Attempt {attempt + 1} with {method.__name__}")
+                    content = await method(normalized_url)
+                    word_count = len(content.split())
+                    self.logger.info(f"Got {word_count} words from {method.__name__}")
+                    if word_count > best_result[1]:
+                        best_result = (content, word_count)
+                    if word_count >= min_words:
+                        self.logger.info(f"Successfully scraped URL: {normalized_url}")
+                        return content
+                except Exception as e:
+                    self.logger.error(f"Error in {method.__name__} (attempt {attempt + 1}): {str(e)}")
+                if attempt < max_retries - 1:
+                    wait_time = random.uniform(1, 3)
+                    self.logger.info(f"Waiting {wait_time:.2f} seconds before next attempt")
+                    await asyncio.sleep(wait_time)
+
+        self.logger.warning(f"Failed to meet minimum word count for URL: {normalized_url}")
+        return best_result[0]
+
+    async def scrape_with_requests(self, url):
+        self.logger.info(f"Scraping with requests: {url}")
+        response = requests.get(url, headers={"User-Agent": self.user_agent.random})
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.content, "html.parser")
+            main_content = soup.find("div", id="abstract") or soup.find("main") or soup.find("body")
+            if main_content:
+                for script in main_content(["script", "style"]):
+                    script.decompose()
+                return main_content.get_text(separator="\n", strip=True)
+        return ""
+
+    async def scrape_with_playwright(self, url):
+        self.logger.info(f"Scraping with Playwright: {url}")
         if not self.browser:
             await self.initialize()
+        context = await self.browser.new_context(
+            user_agent=self.user_agent.random,
+            viewport={"width": 1920, "height": 1080},
+            ignore_https_errors=True,
+        )
+        page = await context.new_page()
+        try:
+            await page.goto(url, wait_until="networkidle", timeout=90000)  # Increased timeout to 90 seconds
+            content = await self.extract_text_content(page)
+            return content
+        except PlaywrightTimeoutError:
+            self.logger.warning(f"Timeout occurred while loading {url}")
+            return ""
+        finally:
+            await page.close()
 
-        retry_count = 0
-        page = None
-        while retry_count < max_retries:
-            try:
-                # Attempt with requests and BeautifulSoup first
-                content = await self.extract_content_with_requests(url)
-                if content and "You are accessing a machine-readable page" not in content and len(content.split()) > 200:
-                    self.logger.info(f"Successfully scraped URL with requests: {url}")
-                    return content
-
-                context = await self.browser.new_context(
-                    user_agent=self.user_agent.random,
-                    viewport={"width": 1920, "height": 1080},
-                    ignore_https_errors=True,
-                    java_script_enabled=True,
-                )
-
-                await context.set_extra_http_headers({
-                    "User-Agent": self.user_agent.random,
-                    "Accept-Language": "en-US,en;q=0.9",
-                    "Accept-Encoding": "gzip, deflate, br",
-                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8",
-                    "Connection": "keep-alive",
-                    "DNT": "1",
-                    "Upgrade-Insecure-Requests": "1",
-                })
-
-                page = await context.new_page()
-
-                cookies = await self.load_cookies()
-                if cookies:
-                    await context.add_cookies(cookies)
-
-                await self.navigate_to_url(page, url, max_retries=3)
-                content = await self.extract_text_content(page)
-
-                if not content:
-                    self.logger.warning(f"No content extracted from {url}. Attempting to follow redirects.")
-                    content = await self.follow_redirects(page, url)
-
-                cookies = await context.cookies()
-                await self.save_cookies(cookies)
-
-                if content:
-                    self.logger.info(f"Successfully scraped URL: {url}")
-                    await context.close()
-                    return content
-                else:
-                    raise Exception("No content extracted after following redirects")
-
-            except Exception as e:
-                self.logger.error(f"Error occurred while scraping URL: {url}. Error: {str(e)}")
-                retry_count += 1
-                await asyncio.sleep(random.uniform(1, 3))
-            finally:
-                if page:
-                    try:
-                        await page.close()
-                    except Exception as e:
-                        self.logger.warning(f"Error occurred while closing page: {str(e)}")
-
-        self.logger.warning(f"Max retries exceeded for URL: {url}")
+    async def scrape_pdf(self, url):
+        self.logger.info(f"Scraping PDF: {url}")
+        async with self.session.get(url) as response:
+            if response.status == 200:
+                pdf_bytes = await response.read()
+                return self.extract_text_from_pdf(pdf_bytes)
         return ""
-
-    async def follow_redirects(self, page, original_url):
-        try:
-            current_url = await page.evaluate("window.location.href")
-            if current_url != original_url:
-                self.logger.info(f"Redirected from {original_url} to {current_url}")
-                await self.navigate_to_url(page, current_url, max_retries=2)
-                return await self.extract_text_content(page)
-            return ""
-        except Exception as e:
-            self.logger.error(f"Error following redirects: {str(e)}")
-            return ""
-
-    async def scrape_pdf(self, url, max_retries=3):
-        retry_count = 0
-        while retry_count < max_retries:
-            try:
-                async with self.session.get(url) as response:
-                    if response.status == 200:
-                        pdf_bytes = await response.read()
-                        pdf_text = self.extract_text_from_pdf(pdf_bytes)
-                        if pdf_text:
-                            self.logger.info(f"Successfully scraped PDF URL: {url}")
-                            return pdf_text
-                        else:
-                            raise Exception("Failed to extract text from PDF")
-                    else:
-                        raise Exception(f"Failed to download PDF, status code: {response.status}")
-            except Exception as e:
-                self.logger.error(f"Error occurred while scraping PDF URL: {url}. Error: {str(e)}")
-                retry_count += 1
-                await asyncio.sleep(random.uniform(1, 3))
-        self.logger.warning(f"Max retries exceeded for PDF URL: {url}")
-        return ""
-
-    def extract_text_from_pdf(self, pdf_bytes):
-        try:
-            document = fitz.open("pdf", pdf_bytes)
-            text = ""
-            for page in document:
-                text += page.get_text()
-            return text.strip()
-        except Exception as e:
-            self.logger.error(f"Failed to extract text from PDF. Error: {str(e)}")
-            return ""
-
-    async def extract_content_with_requests(self, url):
-        try:
-            response = requests.get(url, headers={"User-Agent": self.user_agent.random})
-            if response.status_code == 200:
-                soup = BeautifulSoup(response.content, "html.parser")
-                main_content = soup.find("div", id="abstract") or soup.find("main") or soup.find("body")
-                if main_content:
-                    for script in main_content(["script", "style"]):
-                        script.decompose()
-                    content_text = main_content.get_text(separator="\n", strip=True)
-                    return content_text
-            return ""
-        except Exception as e:
-            self.logger.error(f"Failed to extract content with requests. Error: {str(e)}")
-            return ""
-
-    async def get_url_content(self, url):
-        async with self.semaphore:
-            return await self.scrape_url(url)
-
-    async def navigate_to_url(self, page, url, max_retries=3):
-        retry_count = 0
-        while retry_count < max_retries:
-            try:
-                response = await page.goto(url, wait_until="networkidle", timeout=60000)
-                if response.ok:
-                    await page.wait_for_load_state("load")
-                    await asyncio.sleep(2)
-                    return
-                else:
-                    raise Exception(f"Navigation failed with status: {response.status}")
-            except Exception as e:
-                self.logger.warning(f"Retrying URL: {url}. Remaining retries: {max_retries - retry_count - 1}. Error: {str(e)}")
-                retry_count += 1
-                await asyncio.sleep(random.uniform(1, 3))
-        self.logger.error(f"Failed to navigate to URL: {url} after {max_retries} retries")
-        raise Exception(f"Navigation failed for URL: {url}")
 
     async def extract_text_content(self, page):
         try:
@@ -4222,16 +4140,16 @@ class WebScraper:
             self.logger.error(f"Failed to extract text content. Error: {str(e)}")
             return ""
 
-    async def save_cookies(self, cookies):
-        with open("cookies.json", "w") as file:
-            json.dump(cookies, file)
-
-    async def load_cookies(self):
+    def extract_text_from_pdf(self, pdf_bytes):
         try:
-            with open("cookies.json", "r") as file:
-                return json.load(file)
-        except FileNotFoundError:
-            return None
+            document = fitz.open("pdf", pdf_bytes)
+            text = ""
+            for page in document:
+                text += page.get_text()
+            return text.strip()
+        except Exception as e:
+            self.logger.error(f"Failed to extract text from PDF. Error: {str(e)}")
+            return ""
 
 async def main():
     log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -4245,7 +4163,7 @@ async def main():
     )
 
     async with aiohttp.ClientSession() as session:
-        scraper = WebScraper(session=session)
+        scraper = UnifiedWebScraper(session=session)
         try:
             await scraper.initialize()
         except Exception as e:
@@ -4256,10 +4174,25 @@ async def main():
             "10.1016/j.ifacol.2020.12.237",
             "10.1016/j.agwat.2023.108536",
             "10.1016/j.atech.2023.100251",
-            # ... (rest of the URLs)
+            "10.1016/j.atech.2023.100179",
+            "10.1016/j.ifacol.2023.10.677",
+            "10.1016/j.ifacol.2023.10.1655",
+            "10.1016/j.ifacol.2023.10.667",
+            "10.1002/cjce.24764",
+            "10.3390/app13084734",
+            "10.1016/j.atech.2022.100074",
+            "10.1007/s10668-023-04028-9",
+            "10.1109/IJCNN54540.2023.10191862",
+            "10.1201/9780429290152-5",
+            "10.1016/j.jprocont.2022.10.003",
+            "10.1016/j.rser.2022.112790",
+            "10.1007/s11269-022-03191-4",
+            "10.3390/app12094235",
+            "10.3390/w14060889",
+            "10.3390/su14031304",
         ]
 
-        scrape_tasks = [asyncio.create_task(scraper.get_url_content(url)) for url in urls]
+        scrape_tasks = [asyncio.create_task(scraper.scrape(url)) for url in urls]
         scraped_contents = await asyncio.gather(*scrape_tasks)
 
         success_count = 0
@@ -4267,12 +4200,13 @@ async def main():
 
         print("\nScraping Results:\n" + "=" * 80)
         for url, content in zip(urls, scraped_contents):
-            if content:
-                first_1000_words = " ".join(content.split()[:1000])
-                print(f"\nURL: {url}\nStatus: Success\nFirst 1000 words: {first_1000_words}\n" + "-" * 80)
+            word_count = len(content.split())
+            if word_count >= 700:
+                first_100_words = " ".join(content.split()[:100])
+                print(f"\nURL: {url}\nStatus: Success\nWord count: {word_count}\nFirst 100 words: {first_100_words}\n" + "-" * 80)
                 success_count += 1
             else:
-                print(f"\nURL: {url}\nStatus: Failure\n" + "-" * 80)
+                print(f"\nURL: {url}\nStatus: Failure (insufficient words)\nWord count: {word_count}\n" + "-" * 80)
                 failure_count += 1
 
         print("\nSummary:\n" + "=" * 80)
@@ -4590,7 +4524,7 @@ class CORESearch(BaseSearch):
         <name>openalex_search.py</name>
         <path>academic_claim_analyzer\search\openalex_search.py</path>
         <content>
-# src/academic_claim_analyzer/search/openalex_search.py
+# academic_claim_analyzer/search/openalex_search.py
 
 import aiohttp
 import asyncio
@@ -4598,6 +4532,7 @@ import urllib.parse
 from typing import List
 from .base import BaseSearch
 from ..models import Paper
+from ..paper_scraper import UnifiedWebScraper
 import logging
 
 logger = logging.getLogger(__name__)
@@ -4619,7 +4554,7 @@ class OpenAlexSearch(BaseSearch):
                     async with session.get(search_url) as response:
                         if response.status == 200:
                             data = await response.json()
-                            return self._parse_results(data)
+                            return await self._parse_results(data, session)
                         else:
                             logger.error(f"Unexpected status code from OpenAlex API: {response.status}")
                             return []
@@ -4627,8 +4562,9 @@ class OpenAlexSearch(BaseSearch):
                     logger.error(f"Error occurred while making request to OpenAlex API: {str(e)}")
                     return []
 
-    def _parse_results(self, data: dict) -> List[Paper]:
+    async def _parse_results(self, data: dict, session: aiohttp.ClientSession) -> List[Paper]:
         results = []
+        scraper = UnifiedWebScraper(session)
         for work in data.get("results", []):
             result = Paper(
                 doi=work.get("doi", ""),
@@ -4643,7 +4579,15 @@ class OpenAlexSearch(BaseSearch):
                     "openalex_id": work.get("id", "")
                 }
             )
+            try:
+                if result.doi:
+                    result.full_text = await scraper.scrape(f"https://doi.org/{result.doi}")
+                if not result.full_text and result.pdf_link:
+                    result.full_text = await scraper.scrape(result.pdf_link)
+            except Exception as e:
+                logger.error(f"Error scraping full text for {result.doi or result.pdf_link}: {str(e)}")
             results.append(result)
+        await scraper.close()
         return results
         </content>
     </file>
@@ -4651,7 +4595,7 @@ class OpenAlexSearch(BaseSearch):
         <name>scopus_search.py</name>
         <path>academic_claim_analyzer\search\scopus_search.py</path>
         <content>
-# src/academic_claim_analyzer/search/scopus_search.py
+# academic_claim_analyzer/search/scopus_search.py
 
 import aiohttp
 import asyncio
@@ -4662,6 +4606,7 @@ import time
 from dotenv import load_dotenv
 from .base import BaseSearch
 from ..models import Paper
+from ..paper_scraper import UnifiedWebScraper
 import logging
 
 logger = logging.getLogger(__name__)
@@ -4698,7 +4643,7 @@ class ScopusSearch(BaseSearch):
                     async with session.get(self.base_url, headers=headers, params=params) as response:
                         if response.status == 200:
                             data = await response.json()
-                            return self._parse_results(data)
+                            return await self._parse_results(data, session)
                         else:
                             logger.error(f"Scopus API request failed with status code: {response.status}")
                             return []
@@ -4715,8 +4660,9 @@ class ScopusSearch(BaseSearch):
             else:
                 await asyncio.sleep(0.2)
 
-    def _parse_results(self, data: dict) -> List[Paper]:
+    async def _parse_results(self, data: dict, session: aiohttp.ClientSession) -> List[Paper]:
         results = []
+        scraper = UnifiedWebScraper(session)
         for entry in data.get("search-results", {}).get("entry", []):
             result = Paper(
                 doi=entry.get("prism:doi", ""),
@@ -4724,7 +4670,7 @@ class ScopusSearch(BaseSearch):
                 authors=[author.get("authname", "") for author in entry.get("author", [])],
                 year=int(entry.get("prism:coverDate", "").split("-")[0]),
                 abstract=entry.get("dc:description", ""),
-                pdf_link="",  # Scopus API doesn't provide direct PDF links
+                pdf_link=entry.get("prism:url", ""),  # Using prism:url as a potential full text link
                 source=entry.get("prism:publicationName", ""),
                 metadata={
                     "citation_count": int(entry.get("citedby-count", 0)),
@@ -4732,7 +4678,15 @@ class ScopusSearch(BaseSearch):
                     "eid": entry.get("eid", "")
                 }
             )
+            try:
+                if result.doi:
+                    result.full_text = await scraper.scrape(f"https://doi.org/{result.doi}")
+                if not result.full_text and result.pdf_link:
+                    result.full_text = await scraper.scrape(result.pdf_link)
+            except Exception as e:
+                logger.error(f"Error scraping full text for {result.doi or result.pdf_link}: {str(e)}")
             results.append(result)
+        await scraper.close()
         return results
         </content>
     </file>
@@ -4740,7 +4694,13 @@ class ScopusSearch(BaseSearch):
         <name>__init__.py</name>
         <path>academic_claim_analyzer\search\__init__.py</path>
         <content>
+# academic_claim_analyzer/search/__init__.py
 
+
+from .openalex_search import OpenAlexSearch 
+from .scopus_search import ScopusSearch
+from .core_search import CORESearch
+from .base import BaseSearch
         </content>
     </file>
         </directory>

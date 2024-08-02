@@ -1,4 +1,4 @@
-# src/academic_claim_analyzer/search/scopus_search.py
+# academic_claim_analyzer/search/scopus_search.py
 
 import aiohttp
 import asyncio
@@ -9,6 +9,7 @@ import time
 from dotenv import load_dotenv
 from .base import BaseSearch
 from ..models import Paper
+from ..paper_scraper import UnifiedWebScraper
 import logging
 
 logger = logging.getLogger(__name__)
@@ -45,7 +46,7 @@ class ScopusSearch(BaseSearch):
                     async with session.get(self.base_url, headers=headers, params=params) as response:
                         if response.status == 200:
                             data = await response.json()
-                            return self._parse_results(data)
+                            return await self._parse_results(data, session)
                         else:
                             logger.error(f"Scopus API request failed with status code: {response.status}")
                             return []
@@ -62,8 +63,9 @@ class ScopusSearch(BaseSearch):
             else:
                 await asyncio.sleep(0.2)
 
-    def _parse_results(self, data: dict) -> List[Paper]:
+    async def _parse_results(self, data: dict, session: aiohttp.ClientSession) -> List[Paper]:
         results = []
+        scraper = UnifiedWebScraper(session)
         for entry in data.get("search-results", {}).get("entry", []):
             result = Paper(
                 doi=entry.get("prism:doi", ""),
@@ -71,7 +73,7 @@ class ScopusSearch(BaseSearch):
                 authors=[author.get("authname", "") for author in entry.get("author", [])],
                 year=int(entry.get("prism:coverDate", "").split("-")[0]),
                 abstract=entry.get("dc:description", ""),
-                pdf_link="",  # Scopus API doesn't provide direct PDF links
+                pdf_link=entry.get("prism:url", ""),  # Using prism:url as a potential full text link
                 source=entry.get("prism:publicationName", ""),
                 metadata={
                     "citation_count": int(entry.get("citedby-count", 0)),
@@ -79,5 +81,13 @@ class ScopusSearch(BaseSearch):
                     "eid": entry.get("eid", "")
                 }
             )
+            try:
+                if result.doi:
+                    result.full_text = await scraper.scrape(f"https://doi.org/{result.doi}")
+                if not result.full_text and result.pdf_link:
+                    result.full_text = await scraper.scrape(result.pdf_link)
+            except Exception as e:
+                logger.error(f"Error scraping full text for {result.doi or result.pdf_link}: {str(e)}")
             results.append(result)
+        await scraper.close()
         return results

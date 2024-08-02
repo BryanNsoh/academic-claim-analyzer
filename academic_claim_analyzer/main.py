@@ -1,20 +1,14 @@
-# src/academic_claim_analyzer/main.py
-"""
-Main orchestrator for the Academic Claim Analyzer.
-"""
+# academic_claim_analyzer/main.py
 
 import asyncio
 import logging
-from typing import List, Type
+from typing import List
 from .query_formulator import formulate_queries
-from .paper_scraper import scrape_papers
 from .paper_ranker import rank_papers
-from .search import OpenAlexSearch, ScopusSearch, CoreSearch, BaseSearch
-from .models import ClaimAnalysis, RankedPaper
+from .search import OpenAlexSearch, ScopusSearch, CORESearch, BaseSearch
+from .models import ClaimAnalysis, Paper
 
 logger = logging.getLogger(__name__)
-
-SEARCH_MODULES: List[Type[BaseSearch]] = [OpenAlexSearch, ScopusSearch, CoreSearch]
 
 async def analyze_claim(
     claim: str,
@@ -22,19 +16,6 @@ async def analyze_claim(
     papers_per_query: int = 5,
     num_papers_to_return: int = 1
 ) -> ClaimAnalysis:
-    """
-    Analyze a given claim by searching for relevant papers, ranking them,
-    and returning the top-ranked papers with supporting evidence.
-
-    Args:
-        claim (str): The claim to be analyzed.
-        num_queries (int): Number of search queries to generate.
-        papers_per_query (int): Number of papers to retrieve per query.
-        num_papers_to_return (int): Number of top-ranked papers to return.
-
-    Returns:
-        ClaimAnalysis: Analysis result containing top-ranked papers with supporting evidence.
-    """
     analysis = ClaimAnalysis(
         claim=claim,
         parameters={
@@ -53,29 +34,19 @@ async def analyze_claim(
     return analysis
 
 async def _perform_analysis(analysis: ClaimAnalysis) -> None:
-    """
-    Perform the actual analysis steps.
-    """
     await _formulate_queries(analysis)
     await _perform_searches(analysis)
-    await _scrape_papers(analysis)
     await _rank_papers(analysis)
 
 async def _formulate_queries(analysis: ClaimAnalysis) -> None:
-    """
-    Formulate queries based on the claim.
-    """
-    queries = formulate_queries(analysis.claim, analysis.parameters["num_queries"])
+    queries = await formulate_queries(analysis.claim, analysis.parameters["num_queries"])
     for query in queries:
         analysis.add_query(query, "formulator")
 
 async def _perform_searches(analysis: ClaimAnalysis) -> None:
-    """
-    Perform searches using all search modules.
-    """
+    search_modules = [OpenAlexSearch("your_email@example.com"), ScopusSearch(), CoreSearch()]
     search_tasks = []
-    for search_module_class in SEARCH_MODULES:
-        search_module = search_module_class()
+    for search_module in search_modules:
         for query in analysis.queries:
             search_tasks.append(_search_and_add_results(
                 search_module, query.query, analysis.parameters["papers_per_query"], analysis
@@ -83,9 +54,6 @@ async def _perform_searches(analysis: ClaimAnalysis) -> None:
     await asyncio.gather(*search_tasks)
 
 async def _search_and_add_results(search_module: BaseSearch, query: str, limit: int, analysis: ClaimAnalysis) -> None:
-    """
-    Perform a search and add results to the analysis.
-    """
     try:
         results = await search_module.search(query, limit)
         for paper in results:
@@ -93,16 +61,7 @@ async def _search_and_add_results(search_module: BaseSearch, query: str, limit: 
     except Exception as e:
         logger.error(f"Error during search with {search_module.__class__.__name__}: {str(e)}")
 
-async def _scrape_papers(analysis: ClaimAnalysis) -> None:
-    """
-    Scrape full text content for all papers in the analysis.
-    """
-    analysis.search_results = await scrape_papers(analysis.search_results)
-
 async def _rank_papers(analysis: ClaimAnalysis) -> None:
-    """
-    Rank the papers based on relevance to the claim.
-    """
     ranked_papers = await rank_papers(analysis.search_results, analysis.claim)
     for paper in ranked_papers:
         analysis.add_ranked_paper(paper)

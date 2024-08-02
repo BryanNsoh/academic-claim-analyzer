@@ -1,0 +1,21 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "academic-claim-analyzer"
+version = "0.1.0"
+authors = [
+  { name="Bryan Nsoh", email="bryan.anye.5@gmail.com" },
+]
+description = "A tool for analyzing academic claims"
+readme = "README.md"
+requires-python = ">=3.7"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]

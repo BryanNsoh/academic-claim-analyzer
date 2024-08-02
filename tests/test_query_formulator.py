@@ -1,7 +1,8 @@
 # tests/test_query_formulator.py
 
 import pytest
-from src.academic_claim_analyzer.query_formulator import formulate_queries
+from academic_claim_analyzer.query_formulator import formulate_queries
+
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("claim, num_queries, query_type, expected_keywords", [

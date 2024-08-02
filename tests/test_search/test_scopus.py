@@ -2,8 +2,8 @@
 
 import pytest
 from unittest.mock import patch, MagicMock
-from src.academic_claim_analyzer.search.scopus_search import ScopusSearch
-from src.academic_claim_analyzer.models import Paper
+from academic_claim_analyzer.search.scopus_search import ScopusSearch
+from academic_claim_analyzer.models import Paper
 
 @pytest.fixture
 def mock_scopus_response():

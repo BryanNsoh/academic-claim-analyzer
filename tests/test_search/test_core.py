@@ -2,8 +2,9 @@
 
 import pytest
 from unittest.mock import patch, MagicMock
-from src.academic_claim_analyzer.search.core_search import CORESearch
-from src.academic_claim_analyzer.models import Paper
+
+from academic_claim_analyzer.search.core_search import CORESearch
+from academic_claim_analyzer.models import Paper
 
 @pytest.fixture
 def mock_core_response():

@@ -1,4 +1,4 @@
-Context extraction timestamp: 20240801_141713
+Context extraction timestamp: 20240801_185535
 
 <repository_structure>
 <directory name="academic-claim-analyzer">
@@ -103,13 +103,52 @@ if __name__ == "__main__":
     main()
         </content>
     </file>
+    <file>
+        <name>requirements.txt</name>
+        <path>requirements.txt</path>
+        <content>Full content not provided</content>
+    </file>
 </directory>
-    <directory name="src">
+    <directory name=".pytest_cache">
+    <file>
+        <name>.gitignore</name>
+        <path>.pytest_cache\.gitignore</path>
+        <content>Full content not provided</content>
+    </file>
+    <file>
+        <name>CACHEDIR.TAG</name>
+        <path>.pytest_cache\CACHEDIR.TAG</path>
+        <content>Full content not provided</content>
+    </file>
+    <file>
+        <name>README.md</name>
+        <path>.pytest_cache\README.md</path>
+        <content>Full content not provided</content>
+    </file>
     </directory>
-        <directory name="academic_claim_analyzer">
+        <directory name="v">
+        </directory>
+            <directory name="cache">
+    <file>
+        <name>lastfailed</name>
+        <path>.pytest_cache\v\cache\lastfailed</path>
+        <content>Full content not provided</content>
+    </file>
+    <file>
+        <name>nodeids</name>
+        <path>.pytest_cache\v\cache\nodeids</path>
+        <content>Full content not provided</content>
+    </file>
+    <file>
+        <name>stepwise</name>
+        <path>.pytest_cache\v\cache\stepwise</path>
+        <content>Full content not provided</content>
+    </file>
+            </directory>
+    <directory name="academic_claim_analyzer">
     <file>
         <name>main.py</name>
-        <path>src\academic_claim_analyzer\main.py</path>
+        <path>academic_claim_analyzer\main.py</path>
         <content>
 # src/academic_claim_analyzer/main.py
 """
@@ -247,7 +286,7 @@ if __name__ == "__main__":
     </file>
     <file>
         <name>models.py</name>
-        <path>src\academic_claim_analyzer\models.py</path>
+        <path>academic_claim_analyzer\models.py</path>
         <content>
 # src/academic_claim_analyzer/models.py
 
@@ -305,7 +344,7 @@ class ClaimAnalysis:
     </file>
     <file>
         <name>paper_ranker.py</name>
-        <path>src\academic_claim_analyzer\paper_ranker.py</path>
+        <path>academic_claim_analyzer\paper_ranker.py</path>
         <content>
 # src/academic_claim_analyzer/paper_ranker.py
 
@@ -463,7 +502,7 @@ async def rank_papers(papers: List[Paper], claim: str) -> List[RankedPaper]:
     </file>
     <file>
         <name>paper_scraper.py</name>
-        <path>src\academic_claim_analyzer\paper_scraper.py</path>
+        <path>academic_claim_analyzer\paper_scraper.py</path>
         <content>
 import asyncio
 import random
@@ -749,7 +788,7 @@ if __name__ == "__main__":
     </file>
     <file>
         <name>query_formulator.py</name>
-        <path>src\academic_claim_analyzer\query_formulator.py</path>
+        <path>academic_claim_analyzer\query_formulator.py</path>
         <content>
 # src/academic_claim_analyzer/query_formulator.py
 
@@ -928,7 +967,7 @@ async def formulate_queries(claim: str, num_queries: int, query_type: str) -> Li
     </file>
     <file>
         <name>__init__.py</name>
-        <path>src\academic_claim_analyzer\__init__.py</path>
+        <path>academic_claim_analyzer\__init__.py</path>
         <content>
 # src/academic_claim_analyzer/__init__.py
 """
@@ -941,11 +980,11 @@ for relevant papers, ranking them, and providing supporting evidence.
 from .main import analyze_claim
         </content>
     </file>
-        </directory>
-            <directory name="search">
+    </directory>
+        <directory name="search">
     <file>
         <name>base.py</name>
-        <path>src\academic_claim_analyzer\search\base.py</path>
+        <path>academic_claim_analyzer\search\base.py</path>
         <content>
 # src/academic_claim_analyzer/search/base.py
 
@@ -971,14 +1010,14 @@ class BaseSearch(ABC):
     </file>
     <file>
         <name>bibtex.py</name>
-        <path>src\academic_claim_analyzer\search\bibtex.py</path>
+        <path>academic_claim_analyzer\search\bibtex.py</path>
         <content>
 
         </content>
     </file>
     <file>
         <name>core_search.py</name>
-        <path>src\academic_claim_analyzer\search\core_search.py</path>
+        <path>academic_claim_analyzer\search\core_search.py</path>
         <content>
 # src/academic_claim_analyzer/search/core_search.py
 
@@ -1049,7 +1088,7 @@ class CORESearch(BaseSearch):
     </file>
     <file>
         <name>openalex_search.py</name>
-        <path>src\academic_claim_analyzer\search\openalex_search.py</path>
+        <path>academic_claim_analyzer\search\openalex_search.py</path>
         <content>
 # src/academic_claim_analyzer/search/openalex_search.py
 
@@ -1110,7 +1149,7 @@ class OpenAlexSearch(BaseSearch):
     </file>
     <file>
         <name>scopus_search.py</name>
-        <path>src\academic_claim_analyzer\search\scopus_search.py</path>
+        <path>academic_claim_analyzer\search\scopus_search.py</path>
         <content>
 # src/academic_claim_analyzer/search/scopus_search.py
 
@@ -1199,12 +1238,15 @@ class ScopusSearch(BaseSearch):
     </file>
     <file>
         <name>__init__.py</name>
-        <path>src\academic_claim_analyzer\search\__init__.py</path>
+        <path>academic_claim_analyzer\search\__init__.py</path>
         <content>
-
+from .base import BaseSearch
+from .core_search import CORESearch
+from .openalex_search import OpenAlexSearch
+from .scopus_search import ScopusSearch
         </content>
     </file>
-            </directory>
+        </directory>
     <directory name="tests">
     <file>
         <name>conftest.py</name>
@@ -1234,8 +1276,8 @@ class ScopusSearch(BaseSearch):
 
 import pytest
 from unittest.mock import patch, MagicMock
-from src.academic_claim_analyzer.main import analyze_claim
-from src.academic_claim_analyzer.models import ClaimAnalysis, Paper, RankedPaper
+from academic_claim_analyzer.main import analyze_claim
+from academic_claim_analyzer.models import ClaimAnalysis, Paper, RankedPaper
 
 @pytest.fixture
 def mock_search_results():
@@ -1403,7 +1445,8 @@ if __name__ == "__main__":
 # tests/test_query_formulator.py
 
 import pytest
-from src.academic_claim_analyzer.query_formulator import formulate_queries
+from academic_claim_analyzer.query_formulator import formulate_queries
+
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("claim, num_queries, query_type, expected_keywords", [
@@ -1494,8 +1537,9 @@ async def test_formulate_queries_error_handling():
 
 import pytest
 from unittest.mock import patch, MagicMock
-from src.academic_claim_analyzer.search.core_search import CORESearch
-from src.academic_claim_analyzer.models import Paper
+from academic_claim_analyzer.search.base import BaseSearch
+from academic_claim_analyzer.search.core_search import CORESearch
+from academic_claim_analyzer.models import Paper
 
 @pytest.fixture
 def mock_core_response():
@@ -1564,8 +1608,8 @@ async def test_core_search_error():
 
 import pytest
 from unittest.mock import patch, MagicMock
-from src.academic_claim_analyzer.search.openalex_search import OpenAlexSearch
-from src.academic_claim_analyzer.models import Paper
+from academic_claim_analyzer.search.openalex_search import OpenAlexSearch
+from academic_claim_analyzer.models import Paper
 
 @pytest.fixture
 def mock_openalex_response():
@@ -1632,8 +1676,8 @@ async def test_openalex_search_error():
 
 import pytest
 from unittest.mock import patch, MagicMock
-from src.academic_claim_analyzer.search.scopus_search import ScopusSearch
-from src.academic_claim_analyzer.models import Paper
+from academic_claim_analyzer.search.scopus_search import ScopusSearch
+from academic_claim_analyzer.models import Paper
 
 @pytest.fixture
 def mock_scopus_response():

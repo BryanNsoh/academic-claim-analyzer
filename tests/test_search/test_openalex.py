@@ -2,8 +2,8 @@
 
 import pytest
 from unittest.mock import patch, MagicMock
-from src.academic_claim_analyzer.search.openalex_search import OpenAlexSearch
-from src.academic_claim_analyzer.models import Paper
+from academic_claim_analyzer.search.openalex_search import OpenAlexSearch
+from academic_claim_analyzer.models import Paper
 
 @pytest.fixture
 def mock_openalex_response():

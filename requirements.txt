@@ -10,7 +10,7 @@ asyncio
 pytest
 pytest-asyncio
 beautifulsoup4
-fitz
+PyMuPDF
 playwright
 fake-useragent
 async-llm-handler

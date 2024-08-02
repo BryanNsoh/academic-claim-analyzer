@@ -2,8 +2,8 @@
 
 import pytest
 from unittest.mock import patch, MagicMock
-from src.academic_claim_analyzer.main import analyze_claim
-from src.academic_claim_analyzer.models import ClaimAnalysis, Paper, RankedPaper
+from academic_claim_analyzer.main import analyze_claim
+from academic_claim_analyzer.models import ClaimAnalysis, Paper, RankedPaper
 
 @pytest.fixture
 def mock_search_results():

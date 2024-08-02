@@ -11,6 +11,6 @@ pytest
 pytest-asyncio
 beautifulsoup4
 PyMuPDF
-playwright
+playwright==1.36.0
 fake-useragent
 async-llm-handler

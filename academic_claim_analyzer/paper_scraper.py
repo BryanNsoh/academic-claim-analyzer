@@ -163,7 +163,7 @@ class WebScraper:
         except Exception as e:
             self.logger.error(f"Failed to extract text from PDF. Error: {str(e)}")
             return ""
-
+        
     async def extract_content_with_requests(self, url):
         try:
             response = requests.get(url, headers={"User-Agent": self.user_agent.random})
@@ -250,7 +250,22 @@ async def main():
             "10.1016/j.ifacol.2020.12.237",
             "10.1016/j.agwat.2023.108536",
             "10.1016/j.atech.2023.100251",
-            # ... (rest of the URLs)
+            "10.1016/j.atech.2023.100179",
+            "10.1016/j.ifacol.2023.10.677",
+            "10.1016/j.ifacol.2023.10.1655",
+            "10.1016/j.ifacol.2023.10.667",
+            "10.1002/cjce.24764",
+            "10.3390/app13084734",
+            "10.1016/j.atech.2022.100074",
+            "10.1007/s10668-023-04028-9",
+            "10.1109/IJCNN54540.2023.10191862",
+            "10.1201/9780429290152-5",
+            "10.1016/j.jprocont.2022.10.003",
+            "10.1016/j.rser.2022.112790",
+            "10.1007/s11269-022-03191-4",
+            "10.3390/app12094235",
+            "10.3390/w14060889",
+            "10.3390/su14031304",
         ]
 
         scrape_tasks = [asyncio.create_task(scraper.get_url_content(url)) for url in urls]
@@ -262,7 +277,7 @@ async def main():
         print("\nScraping Results:\n" + "=" * 80)
         for url, content in zip(urls, scraped_contents):
             if content:
-                first_1000_words = " ".join(content.split()[:1000])
+                first_1000_words = " ".join(content.split()[:100])
                 print(f"\nURL: {url}\nStatus: Success\nFirst 1000 words: {first_1000_words}\n" + "-" * 80)
                 success_count += 1
             else:

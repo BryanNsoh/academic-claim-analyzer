@@ -2,7 +2,7 @@ import os
 import datetime
 
 EXCLUDED_DIRS = {".git", "__pycache__", "node_modules", ".venv"}
-FULL_CONTENT_EXTENSIONS = {".py", ".dbml", ".yaml"}
+FULL_CONTENT_EXTENSIONS = {".py", ".toml", ".dbml", ".yaml"}
 
 def create_file_element(file_path, root_folder):
     relative_path = os.path.relpath(file_path, root_folder)

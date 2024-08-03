@@ -1,4 +1,4 @@
-Context extraction timestamp: 20240803_100152
+Context extraction timestamp: 20240803_175013
 
 <repository_structure>
 <directory name="academic-claim-analyzer">
@@ -26,6 +26,11 @@ sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
     <file>
         <name>cookies.json</name>
         <path>cookies.json</path>
+        <content>Full content not provided</content>
+    </file>
+    <file>
+        <name>firecrawl_setup.md</name>
+        <path>firecrawl_setup.md</path>
         <content>Full content not provided</content>
     </file>
     <file>
@@ -3999,6 +4004,8 @@ async def retry_llm_query(handler: Handler, prompt: str, model: str, max_retries
     for attempt in range(max_retries):
         try:
             response = await handler.query(prompt, model=model, json_mode=True)
+            if isinstance(response, str):
+                return json.loads(response)
             return response
         except json.JSONDecodeError:
             logger.warning(f"Attempt {attempt + 1}/{max_retries}: Failed to parse LLM response as JSON.")
@@ -4023,6 +4030,9 @@ async def rank_group(handler: Handler, claim: str, papers: List[Paper]) -> List[
     try:
         rankings = await retry_llm_query(handler, prompt, model="gpt_4o_mini")
         print(f"Group Rankings: {rankings}")
+        
+        if isinstance(rankings, dict) and "rankings" in rankings:
+            rankings = rankings["rankings"]
         
         if not isinstance(rankings, list) or len(rankings) != len(papers):
             logger.warning(f"Unexpected rankings format. Expected list of {len(papers)} items, got: {rankings}")
@@ -4049,7 +4059,7 @@ async def analyze_paper(handler: Handler, claim: str, paper: Paper) -> Dict[str,
         analysis = await retry_llm_query(handler, prompt, model="gpt_4o_mini")
         print(f"Paper Analysis: {analysis}")
         
-        if 'analysis' not in analysis or 'relevant_quotes' not in analysis:
+        if not isinstance(analysis, dict) or 'analysis' not in analysis or 'relevant_quotes' not in analysis:
             logger.warning("Incomplete analysis received")
             raise ValueError("Incomplete analysis received")
         

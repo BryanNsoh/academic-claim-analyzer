@@ -2,7 +2,7 @@
 
 from typing import List
 import json
-from async_llm_handler import LLMHandler
+from async_llm_handler import Handler
 
 SCOPUS_SEARCH_GUIDE = """
 Syntax and Operators
@@ -37,13 +37,15 @@ Complex searches should be built up systematically, with parentheses to group re
 
 Example Advanced Searches
 
-[
-"TITLE-ABS-KEY(("precision agriculture" OR "precision farming") AND ("machine learning" OR "AI") AND "water")",
-"TITLE-ABS-KEY((iot OR \"internet of things\") AND (irrigation OR watering) AND sensor*)",
-"TITLE-ABS-Key((\"precision farming\" OR \"precision agriculture\") AND (\"deep learning\" OR \"neural networks\") AND \"water\")",
-"TITLE-ABS-KEY((crop W/5 monitor*) AND \"remote sensing\" AND (irrigation OR water*))",
-"TITLE(\"precision irrigation\" OR \"variable rate irrigation\" AND \"machine learning\")"
-]
+{
+  "queries": [
+    "TITLE-ABS-KEY((\"precision agriculture\" OR \"precision farming\") AND (\"machine learning\" OR \"AI\") AND \"water\")",
+    "TITLE-ABS-KEY((iot OR \"internet of things\") AND (irrigation OR watering) AND sensor*)",
+    "TITLE-ABS-Key((\"precision farming\" OR \"precision agriculture\") AND (\"deep learning\" OR \"neural networks\") AND \"water\")",
+    "TITLE-ABS-KEY((crop W/5 monitor*) AND \"remote sensing\" AND (irrigation OR water*))",
+    "TITLE(\"precision irrigation\" OR \"variable rate irrigation\" AND \"machine learning\")"
+  ]
+}
 
 
 ** Critical: all double quotes other than the outermost ones should be preceded by a backslash (") to escape them in the JSON format. Failure to do so will result in an error when parsing the JSON string. **. 
@@ -81,13 +83,15 @@ By following these guidelines and using proper URL encoding, you can construct e
 Searches should be concise yet precise, following the syntax rules carefully. 
 
 Example Searches
-[
-"https://api.openalex.org/works?search=%22precision+irrigation%22+%2B%22soil+moisture+sensors%22+%2B%22irrigation+scheduling%22&sort=relevance_score:desc&per-page=30",
-"https://api.openalex.org/works?search=%22machine+learning%22+%2B%22irrigation+management%22+%2B%22crop+water+demand+prediction%22&sort=relevance_score:desc&per-page=30",
-"https://api.openalex.org/works?search=%22IoT+sensors%22+%2B%22real-time%22+%2B%22soil+moisture+monitoring%22+%2B%22crop+water+stress%22&sort=relevance_score:desc&per-page=30",
-"https://api.openalex.org/works?search=%22remote+sensing%22+%2B%22vegetation+indices%22+%2B%22irrigation+scheduling%22&sort=relevance_score:desc&per-page=30",
-"https://api.openalex.org/works?search=%22wireless+sensor+networks%22+%2B%22precision+agriculture%22+%2B%22variable+rate+irrigation%22+%2B%22irrigation+automation%22&sort=relevance_score:desc&per-page=30"
-]
+{
+  "queries": [
+    "https://api.openalex.org/works?search=%22precision+irrigation%22+%2B%22soil+moisture+sensors%22+%2B%22irrigation+scheduling%22&sort=relevance_score:desc&per-page=30",
+    "https://api.openalex.org/works?search=%22machine+learning%22+%2B%22irrigation+management%22+%2B%22crop+water+demand+prediction%22&sort=relevance_score:desc&per-page=30",
+    "https://api.openalex.org/works?search=%22IoT+sensors%22+%2B%22real-time%22+%2B%22soil+moisture+monitoring%22+%2B%22crop+water+stress%22&sort=relevance_score:desc&per-page=30",
+    "https://api.openalex.org/works?search=%22remote+sensing%22+%2B%22vegetation+indices%22+%2B%22irrigation+scheduling%22&sort=relevance_score:desc&per-page=30",
+    "https://api.openalex.org/works?search=%22wireless+sensor+networks%22+%2B%22precision+agriculture%22+%2B%22variable+rate+irrigation%22+%2B%22irrigation+automation%22&sort=relevance_score:desc&per-page=30"
+  ]
+}
 
 These example searches demonstrate how to create targeted, effective alex searches. They focus on specific topics, exclude irrelevant results, allow synonym flexibility, and limit to relevant domains when needed. The search terms are carefully selected to balance relevance and specificity while avoiding being overly restrictive.  By combining relevant keywords, exact phrases, and operators, these searches help generate high-quality results for the given topics.
 """
@@ -146,7 +150,7 @@ async def formulate_queries(claim: str, num_queries: int, query_type: str) -> Li
     Returns:
         List[str]: A list of generated search queries.
     """
-    handler = LLMHandler()
+    handler = Handler()
 
     if query_type.lower() == 'scopus':
         search_guidance = SCOPUS_SEARCH_GUIDE
@@ -162,12 +166,25 @@ async def formulate_queries(claim: str, num_queries: int, query_type: str) -> Li
         QUERY_TYPE=query_type
     )
 
-    response = await handler.query(prompt, model="gpt_4o_mini", sync=False)
+    response = await handler.query(prompt, model="gpt_4o_mini", json_mode=True)
     
-    try:
-        queries = json.loads(response)
-        if not isinstance(queries, list) or len(queries) != num_queries:
-            raise ValueError("Invalid response format")
-        return queries
-    except json.JSONDecodeError:
-        raise ValueError("Failed to parse the response as JSON")
+    if isinstance(response, str):
+        try:
+            parsed_response = json.loads(response)
+        except json.JSONDecodeError:
+            raise ValueError("Failed to parse LLM response as JSON")
+    elif isinstance(response, dict):
+        parsed_response = response
+    else:
+        raise ValueError("Unexpected response format from LLM")
+
+    if "queries" not in parsed_response or not isinstance(parsed_response["queries"], list):
+        raise ValueError("Invalid response format: 'queries' list not found")
+
+    queries = parsed_response["queries"]
+    print(queries)  
+
+    if len(queries) != num_queries:
+        raise ValueError(f"Expected {num_queries} queries, but got {len(queries)}")
+
+    return queries

@@ -12,9 +12,9 @@ logger = logging.getLogger(__name__)
 
 async def analyze_claim(
     claim: str,
-    num_queries: int = 5,
-    papers_per_query: int = 5,
-    num_papers_to_return: int = 1
+    num_queries: int = 2,
+    papers_per_query: int = 2,
+    num_papers_to_return: int = 2
 ) -> ClaimAnalysis:
     analysis = ClaimAnalysis(
         claim=claim,

@@ -47,9 +47,12 @@ class UnifiedWebScraper:
 
         scraping_methods = [
             self.scrape_with_requests,
-            self.scrape_with_playwright,
-            self.scrape_pdf
+            self.scrape_with_playwright
         ]
+
+        # Only add PDF scraping method if the URL ends with .pdf
+        if normalized_url.lower().endswith('.pdf'):
+            scraping_methods.append(self.scrape_pdf)
 
         best_result = ("", 0)
         for method in scraping_methods:
@@ -98,7 +101,7 @@ class UnifiedWebScraper:
         )
         page = await context.new_page()
         try:
-            await page.goto(url, wait_until="networkidle", timeout=90000)  # Increased timeout to 90 seconds
+            await page.goto(url, wait_until="networkidle", timeout=15000)  # Increased timeout to 90 seconds
             content = await self.extract_text_content(page)
             return content
         except PlaywrightTimeoutError:

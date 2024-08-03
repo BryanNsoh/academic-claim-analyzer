@@ -1,4 +1,4 @@
-Context extraction timestamp: 20240802_080842
+Context extraction timestamp: 20240803_100152
 
 <repository_structure>
 <directory name="academic-claim-analyzer">
@@ -3710,9 +3710,9 @@ logger = logging.getLogger(__name__)
 
 async def analyze_claim(
     claim: str,
-    num_queries: int = 5,
-    papers_per_query: int = 5,
-    num_papers_to_return: int = 1
+    num_queries: int = 2,
+    papers_per_query: int = 2,
+    num_papers_to_return: int = 2
 ) -> ClaimAnalysis:
     analysis = ClaimAnalysis(
         claim=claim,
@@ -3789,7 +3789,16 @@ async def main():
     print(f"Claim: {analysis_result.claim}")
     print(f"Number of queries generated: {len(analysis_result.queries)}")
     print(f"Total papers found: {len(analysis_result.search_results)}")
-    print(f"Number of ranked papers: {len(analysis_result.ranked_papers)}")
+    
+    # Add this section to print a summary of all search results
+    print("\nSearch Results Summary:")
+    for i, paper in enumerate(analysis_result.search_results, 1):
+        print(f"\n{i}. Title: {paper.title}")
+        print(f"   Authors: {', '.join(paper.authors)}")
+        print(f"   DOI: {paper.doi}")
+        print(f"   Source: {paper.source}")
+    
+    print(f"\nNumber of ranked papers: {len(analysis_result.ranked_papers)}")
     print("\nTop ranked papers:")
     
     for paper in analysis_result.get_top_papers(analysis_result.parameters["num_papers_to_return"]):
@@ -3869,158 +3878,268 @@ class ClaimAnalysis:
         <name>paper_ranker.py</name>
         <path>academic_claim_analyzer\paper_ranker.py</path>
         <content>
-# src/academic_claim_analyzer/paper_ranker.py
+# academic_claim_analyzer/paper_ranker.py
 
-"""
-This module contains the functions for ranking papers based on their relevance to a given claim.
-
-The ranking algorithm is as follows:
-To simplify the plan while maintaining output quality, we need to identify which components contribute the most to the robustness and accuracy of the results. We can streamline the process by focusing on the most impactful elements and eliminating steps that add complexity without significantly improving the outcome.
-
-### Simplified Plan: Shuffled Group Ranking with Averaged Scoring
-
-### Key Components to Retain:
-1. **Clipping Papers**: Essential for ensuring manageable text lengths.
-2. **Initial Group Comparisons**: Necessary for creating an initial ranking.
-3. **Adaptive Shuffling**: Ensures diverse comparisons and reduces bias.
-4. **Final Scoring and Selection**: Critical for determining the top papers.
-
-### Components to Remove:
-1. **Stratified Group Formation**: While helpful, the benefits of stratified sampling are marginal compared to random grouping when multiple rounds of shuffling are used.
-2. **Weighted Scoring System**: The improvement from weighting scores is minimal compared to the complexity it adds. Simple averaging can suffice.
-3. **Detailed Preprocessing for Relevant Sections**: Using the full text without detailed preprocessing for relevant sections simplifies implementation without a significant loss in quality, especially when using the full text within the 9,000-word limit.
-
-### Final Simplified Plan:
-
-#### Step-by-Step Process:
-
-### Overview:
-1. **Clipping Papers**: Ensure papers are clipped to a manageable length.
-2. **Initial Group Comparisons**: Rank groups of papers.
-3. **Adaptive Shuffling and Re-Comparison**: Shuffle and re-rank papers to ensure diverse comparisons.
-4. **Final Selection**: Rank papers based on averaged scores and select the top N.
-
-#### Step 1: Preprocessing - Clipping Papers
-
-**Objective**: Reduce the length of each paper to a maximum of 9,000 words to ensure that the comparison text is manageable.
-
-1. **Clip Papers**: 
-   - Use a function to clip each paper to 9,000 words.
-   - This ensures the text remains within the LLM's context window and focuses on the most relevant content.
-
-#### Step 2: Initial Group Comparisons
-
-**Objective**: Form initial groups of papers and rank them.
-
-1. **Form Groups**:
-   - Divide the clipped papers into groups of four.
-
-2. **Comparison and Ranking**:
-   - **Prompt**: "Rank these four papers from most to least relevant to the query: Paper A (summary/abstract), Paper B (summary/abstract), Paper C (summary/abstract), Paper D (summary/abstract)."
-   - **Action**: The LLM ranks the four papers in one API call.
-   - **Scoring**: Assign scores based on the rank within each group (4 points for the top paper, 3 for the second, 2 for the third, 1 for the fourth).
-
-3. **Repeat for All Groups**:
-   - Continue this process for all initial groups of four.
-
-#### Step 3: Adaptive Shuffling and Re-Comparison
-
-**Objective**: Ensure diverse comparisons by shuffling papers and re-ranking them in multiple rounds.
-
-1. **Shuffle Papers**:
-   - Randomly reshuffle the papers to form new groups, ensuring diversity and avoiding repeated groupings as much as possible.
-
-2. **New Group Comparisons**:
-   - Form new groups of four and repeat the comparison and ranking process.
-   - Use the same ranking prompt as in Step 2.
-
-3. **Repeat and Average**:
-   - Perform multiple rounds of shuffling and comparisons (e.g., 3-5 rounds).
-   - Average the scores for each paper across all rounds to get a final relevance score.
-
-#### Step 4: Final Selection
-
-**Objective**: Rank papers based on averaged scores and select the top N papers.
-
-1. **Rank Based on Averaged Scores**:
-   - Rank the papers based on their averaged scores from all comparison rounds.
-
-2. **Select Top N Papers**:
-   - Choose the top N papers based on the final ranking.
-
-### Example Workflow for 20 Papers:
-
-1. **Clipping Papers**:
-   - Clip each of the 20 papers to a maximum of 9,000 words.
-
-2. **Initial Group Comparisons**:
-   - **Form Groups**: 20 papers, groups of 4 → 5 groups.
-   - **API Calls**: 5 calls (each call ranks 4 papers).
-
-3. **Shuffle and Re-Compare**:
-   - **Shuffle**: Randomly reshuffle papers into new groups.
-   - **Repeat Comparisons**: Perform 3 rounds of shuffling and comparisons.
-   - **API Calls per Round**: 5 calls (each call ranks 4 papers).
-   - **Total API Calls for Shuffling**: 3 rounds × 5 calls = 15 calls.
-
-4. **Final Scoring and Selection**:
-   - **Average Scores**: Aggregate and average scores from all rounds.
-   - **Select Top Papers**: Based on final averaged scores.
-
-### API Call Analysis for Different Numbers of Papers:
-
-#### For 10 Papers:
-- **Initial Group Comparisons**: \( \frac{10}{4} = 2.5 \) (round up to 3 groups) → 3 API calls.
-- **Shuffling Rounds**: 3 rounds × 3 calls = 9 API calls.
-- **Total**: 3 + 9 = 12 API calls.
-- **Ratio**: 12 API calls / 10 papers = 1.2.
-
-#### For 20 Papers:
-- **Initial Group Comparisons**: \( \frac{20}{4} = 5 \) groups → 5 API calls.
-- **Shuffling Rounds**: 3 rounds × 5 calls = 15 API calls.
-- **Total**: 5 + 15 = 20 API calls.
-- **Ratio**: 20 API calls / 20 papers = 1.
-
-#### For 50 Papers:
-- **Initial Group Comparisons**: \( \frac{50}{4} = 12.5 \) (round up to 13 groups) → 13 API calls.
-- **Shuffling Rounds**: 3 rounds × 13 calls = 39 API calls.
-- **Total**: 13 + 39 = 52 API calls.
-- **Ratio**: 52 API calls / 50 papers = 1.04.
-
-### Final Analysis:
-
-**Pros**:
-- **Efficiency**: Significant reduction in API calls compared to pairwise comparisons.
-- **Fairness**: Shuffling and multiple rounds ensure that good and bad papers are fairly compared.
-- **Precision**: Averaging scores across multiple rounds reduces the impact of any single comparison’s bias.
-
-**Cons**:
-- **Complexity**: Reduced from the original plan but still requires implementing shuffling logic.
-- **API Cost**: Though reduced, still involves multiple rounds of comparisons.
-
-### Conclusion:
-
-By focusing on essential elements such as clipping papers, initial group comparisons, adaptive shuffling, and final scoring, we maintain a balance of efficiency, fairness, and precision while minimizing complexity and API calls. This streamlined approach should effectively rank academic papers with a high degree of reliability.
-
-
-"""
-
-from typing import List
+import asyncio
+import json
+import random
+from typing import List, Dict
 from .models import Paper, RankedPaper
+from async_llm_handler import Handler
+import logging
 
-async def rank_papers(papers: List[Paper], claim: str) -> List[RankedPaper]:
-    """
-    Rank the given papers based on their relevance to the claim.
+logger = logging.getLogger(__name__)
 
-    Args:
-        papers (List[Paper]): The papers to be ranked.
-        claim (str): The claim to rank the papers against.
+RANKING_PROMPT = """
+Analyze the relevance of the following papers to the claim: "{claim}"
 
-    Returns:
-        List[RankedPaper]: A list of ranked papers with analysis and relevant quotes.
-    """
-    # Implementation details will be added later
-    pass
+Papers:
+{paper_summaries}
+
+Rank these papers from most to least relevant based on the following criteria:
+1. Direct relevance to the claim (either supporting or refuting it)
+2. Quality and reliability of the research
+3. Recency and impact of the findings
+
+Focus primarily on the full text content of each paper. Other metadata (title, authors, etc.) may be missing or incomplete, but should not significantly affect your ranking if the full text is present.
+
+Your response should be in the following JSON format:
+{{
+  "rankings": [
+    {{
+      "paper_id": "string",
+      "rank": integer,
+      "explanation": "string"
+    }},
+    ...
+  ]
+}}
+
+Ensure that each paper is assigned a unique rank from 1 to {num_papers}, where 1 is the most relevant. Provide a concise, technical explanation for each ranking, focusing on how the paper's content directly addresses the claim.
+"""
+
+ANALYSIS_PROMPT = """
+Provide a detailed, technical analysis of the following paper's relevance to the claim: "{claim}"
+
+Paper Full Text: {full_text}
+
+Additional metadata (if available):
+Title: {title}
+Authors: {authors}
+Publication Year: {year}
+DOI: {doi}
+Abstract: {abstract}
+
+Your response must be in the following JSON format:
+{{
+  "analysis": "string",
+  "relevant_quotes": [
+    "string",
+    "string",
+    "string"
+  ]
+}}
+
+In the analysis:
+1. Evaluate how directly the paper addresses the claim, either supporting or refuting it.
+2. Assess the methodology, sample size, and statistical significance of the findings.
+3. Consider any limitations or potential biases in the study.
+4. Discuss how the paper's findings contribute to the broader understanding of the claim.
+
+Extract exactly three relevant quotes from the paper that best support your analysis. These should be verbatim excerpts that directly relate to the claim.
+
+Ensure your analysis is highly precise, technical, and grounded in the paper's content. Avoid general statements and focus on specific details from the study.
+"""
+
+
+def create_balanced_groups(papers: List[Paper], min_group_size: int = 2, max_group_size: int = 5) -> List[List[Paper]]:
+    """Create balanced groups of papers, ensuring each group has at least min_group_size papers."""
+    num_papers = len(papers)
+    logger.info(f"Creating balanced groups for {num_papers} papers")
+    logger.info(f"min_group_size: {min_group_size}, max_group_size: {max_group_size}")
+
+    if num_papers < min_group_size:
+        logger.warning(f"Too few papers ({num_papers}) to create groups. Returning single group.")
+        return [papers]
+
+    try:
+        if num_papers < max_group_size:
+            logger.info(f"Number of papers ({num_papers}) less than max_group_size ({max_group_size}). Using num_papers as group size.")
+            group_size = num_papers
+        else:
+            inner_division = num_papers // max_group_size
+            logger.info(f"Inner division result: {inner_division}")
+            if inner_division == 0:
+                logger.warning(f"Inner division resulted in zero. Using max_group_size ({max_group_size}) as group size.")
+                group_size = max_group_size
+            else:
+                group_size = min(max_group_size, max(min_group_size, num_papers // inner_division))
+        
+        logger.info(f"Calculated group size: {group_size}")
+
+        # Create initial groups
+        groups = [papers[i:i+group_size] for i in range(0, num_papers, group_size)]
+        
+        # Redistribute papers from the last group if it's too small
+        if len(groups[-1]) < min_group_size:
+            last_group = groups.pop()
+            for i, paper in enumerate(last_group):
+                groups[i % len(groups)].append(paper)
+        
+        logger.info(f"Created {len(groups)} groups")
+        return groups
+
+    except Exception as e:
+        logger.error(f"Error in create_balanced_groups: {str(e)}")
+        logger.error(f"Falling back to single group")
+        return [papers]
+
+async def retry_llm_query(handler: Handler, prompt: str, model: str, max_retries: int = 3) -> Dict[str, any]:
+    """Retry LLM query with error handling and JSON parsing."""
+    for attempt in range(max_retries):
+        try:
+            response = await handler.query(prompt, model=model, json_mode=True)
+            return response
+        except json.JSONDecodeError:
+            logger.warning(f"Attempt {attempt + 1}/{max_retries}: Failed to parse LLM response as JSON.")
+            if attempt == max_retries - 1:
+                logger.error(f"All attempts failed. Last response: {response}")
+                raise ValueError("Failed to get valid JSON response after multiple attempts")
+        except Exception as e:
+            logger.error(f"Error during LLM query: {str(e)}")
+            raise
+
+async def rank_group(handler: Handler, claim: str, papers: List[Paper]) -> List[Dict[str, any]]:
+    """Rank a group of papers using the LLM."""
+    paper_summaries = "\n".join([
+        f"Paper ID: {paper.id}\n"
+        f"Full Text: {getattr(paper, 'full_text', 'N/A')[:500]}...\n"
+        f"Title: {getattr(paper, 'title', 'N/A')}\n"
+        f"Abstract: {getattr(paper, 'abstract', 'N/A')[:200]}..."
+        for paper in papers
+    ])
+    prompt = RANKING_PROMPT.format(claim=claim, paper_summaries=paper_summaries, num_papers=len(papers))
+    
+    try:
+        rankings = await retry_llm_query(handler, prompt, model="gpt_4o_mini")
+        print(f"Group Rankings: {rankings}")
+        
+        if not isinstance(rankings, list) or len(rankings) != len(papers):
+            logger.warning(f"Unexpected rankings format. Expected list of {len(papers)} items, got: {rankings}")
+            raise ValueError("Unexpected rankings format")
+        
+        return rankings
+    except Exception as e:
+        logger.error(f"Error during ranking: {str(e)}")
+        return []
+
+async def analyze_paper(handler: Handler, claim: str, paper: Paper) -> Dict[str, any]:
+    """Analyze a single paper for relevance and extract quotes."""
+    prompt = ANALYSIS_PROMPT.format(
+        claim=claim,
+        full_text=getattr(paper, 'full_text', 'N/A'),
+        title=getattr(paper, 'title', 'N/A'),
+        authors=getattr(paper, 'authors', 'N/A'),
+        year=getattr(paper, 'year', 'N/A'),
+        doi=getattr(paper, 'doi', 'N/A'),
+        abstract=getattr(paper, 'abstract', 'N/A')
+    )
+    
+    try:
+        analysis = await retry_llm_query(handler, prompt, model="gpt_4o_mini")
+        print(f"Paper Analysis: {analysis}")
+        
+        if 'analysis' not in analysis or 'relevant_quotes' not in analysis:
+            logger.warning("Incomplete analysis received")
+            raise ValueError("Incomplete analysis received")
+        
+        return analysis
+    except Exception as e:
+        logger.error(f"Error during paper analysis: {str(e)}")
+        return {"analysis": "", "relevant_quotes": []}
+
+async def rank_papers(papers: List[Paper], claim: str, num_rounds: int = 3, top_n: int = 5) -> List[RankedPaper]:
+    """Rank papers based on their relevance to the given claim."""
+    handler = Handler()
+    
+    logger.info(f"Starting to rank {len(papers)} papers")
+
+    # Filter out papers with no full text or full text shorter than 200 words
+    valid_papers = [paper for paper in papers if getattr(paper, 'full_text', '') and len(getattr(paper, 'full_text', '').split()) >= 200]
+    logger.info(f"After filtering, {len(valid_papers)} valid papers remain")
+    
+    # Remove duplicates based on DOI or title
+    unique_papers = []
+    seen_dois = set()
+    seen_titles = set()
+    for paper in valid_papers:
+        if getattr(paper, 'doi', None) and paper.doi not in seen_dois:
+            seen_dois.add(paper.doi)
+            unique_papers.append(paper)
+        elif getattr(paper, 'title', None) and paper.title not in seen_titles:
+            seen_titles.add(paper.title)
+            unique_papers.append(paper)
+    
+    # Assign unique IDs to papers if not already present
+    for i, paper in enumerate(unique_papers):
+        if not hasattr(paper, 'id'):
+            setattr(paper, 'id', f"paper_{i}")
+    
+    paper_scores: Dict[str, List[float]] = {paper.id: [] for paper in unique_papers}
+    
+    for round in range(num_rounds):
+        logger.info(f"Starting ranking round {round + 1} of {num_rounds}")
+        shuffled_papers = random.sample(unique_papers, len(unique_papers))
+        
+        # Create balanced groups
+        paper_groups = create_balanced_groups(shuffled_papers)
+        
+        # Rank each group
+        ranking_tasks = [rank_group(handler, claim, group) for group in paper_groups]
+        group_rankings = await asyncio.gather(*ranking_tasks)
+        
+        # Accumulate scores
+        for rankings in group_rankings:
+            group_size = len(rankings)
+            for ranking in rankings:
+                paper_id = ranking['paper_id']
+                rank = ranking['rank']
+                # Normalize score based on group size
+                score = (group_size - rank + 1) / group_size
+                paper_scores[paper_id].append(score)
+    
+    # Calculate average scores, handling potential division by zero
+    average_scores = {}
+    for paper_id, scores in paper_scores.items():
+        if scores:
+            average_scores[paper_id] = sum(scores) / len(scores)
+        else:
+            logger.warning(f"No scores recorded for paper {paper_id}. Assigning lowest score.")
+            average_scores[paper_id] = 0
+    
+    # Sort papers by average score
+    sorted_papers = sorted(unique_papers, key=lambda p: average_scores[p.id], reverse=True)
+    
+    # Analyze top N papers
+    top_papers = sorted_papers[:top_n]
+    analysis_tasks = [analyze_paper(handler, claim, paper) for paper in top_papers]
+    paper_analyses = await asyncio.gather(*analysis_tasks)
+    
+    # Create RankedPaper objects
+    ranked_papers = []
+    for paper, analysis in zip(top_papers, paper_analyses):
+        paper_dict = paper.__dict__.copy()
+        paper_dict.pop('id', None)  # Remove 'id' from the dictionary
+        ranked_paper = RankedPaper(
+            **paper_dict,
+            relevance_score=average_scores[paper.id],
+            analysis=analysis['analysis'],
+            relevant_quotes=analysis['relevant_quotes']
+        )
+        ranked_papers.append(ranked_paper)
+    
+    logger.info(f"Completed paper ranking. Top score: {ranked_papers[0].relevance_score:.2f}, Bottom score: {ranked_papers[-1].relevance_score:.2f}")
+    return ranked_papers
         </content>
     </file>
     <file>
@@ -4076,9 +4195,12 @@ class UnifiedWebScraper:
 
         scraping_methods = [
             self.scrape_with_requests,
-            self.scrape_with_playwright,
-            self.scrape_pdf
+            self.scrape_with_playwright
         ]
+
+        # Only add PDF scraping method if the URL ends with .pdf
+        if normalized_url.lower().endswith('.pdf'):
+            scraping_methods.append(self.scrape_pdf)
 
         best_result = ("", 0)
         for method in scraping_methods:
@@ -4127,7 +4249,7 @@ class UnifiedWebScraper:
         )
         page = await context.new_page()
         try:
-            await page.goto(url, wait_until="networkidle", timeout=90000)  # Increased timeout to 90 seconds
+            await page.goto(url, wait_until="networkidle", timeout=15000)  # Increased timeout to 90 seconds
             content = await self.extract_text_content(page)
             return content
         except PlaywrightTimeoutError:
@@ -4246,7 +4368,7 @@ if __name__ == "__main__":
 
 from typing import List
 import json
-from async_llm_handler import LLMHandler
+from async_llm_handler import Handler
 
 SCOPUS_SEARCH_GUIDE = """
 Syntax and Operators
@@ -4281,13 +4403,15 @@ Complex searches should be built up systematically, with parentheses to group re
 
 Example Advanced Searches
 
-[
-"TITLE-ABS-KEY(("precision agriculture" OR "precision farming") AND ("machine learning" OR "AI") AND "water")",
-"TITLE-ABS-KEY((iot OR \"internet of things\") AND (irrigation OR watering) AND sensor*)",
-"TITLE-ABS-Key((\"precision farming\" OR \"precision agriculture\") AND (\"deep learning\" OR \"neural networks\") AND \"water\")",
-"TITLE-ABS-KEY((crop W/5 monitor*) AND \"remote sensing\" AND (irrigation OR water*))",
-"TITLE(\"precision irrigation\" OR \"variable rate irrigation\" AND \"machine learning\")"
-]
+{
+  "queries": [
+    "TITLE-ABS-KEY((\"precision agriculture\" OR \"precision farming\") AND (\"machine learning\" OR \"AI\") AND \"water\")",
+    "TITLE-ABS-KEY((iot OR \"internet of things\") AND (irrigation OR watering) AND sensor*)",
+    "TITLE-ABS-Key((\"precision farming\" OR \"precision agriculture\") AND (\"deep learning\" OR \"neural networks\") AND \"water\")",
+    "TITLE-ABS-KEY((crop W/5 monitor*) AND \"remote sensing\" AND (irrigation OR water*))",
+    "TITLE(\"precision irrigation\" OR \"variable rate irrigation\" AND \"machine learning\")"
+  ]
+}
 
 
 ** Critical: all double quotes other than the outermost ones should be preceded by a backslash (") to escape them in the JSON format. Failure to do so will result in an error when parsing the JSON string. **. 
@@ -4325,13 +4449,15 @@ By following these guidelines and using proper URL encoding, you can construct e
 Searches should be concise yet precise, following the syntax rules carefully. 
 
 Example Searches
-[
-"https://api.openalex.org/works?search=%22precision+irrigation%22+%2B%22soil+moisture+sensors%22+%2B%22irrigation+scheduling%22&sort=relevance_score:desc&per-page=30",
-"https://api.openalex.org/works?search=%22machine+learning%22+%2B%22irrigation+management%22+%2B%22crop+water+demand+prediction%22&sort=relevance_score:desc&per-page=30",
-"https://api.openalex.org/works?search=%22IoT+sensors%22+%2B%22real-time%22+%2B%22soil+moisture+monitoring%22+%2B%22crop+water+stress%22&sort=relevance_score:desc&per-page=30",
-"https://api.openalex.org/works?search=%22remote+sensing%22+%2B%22vegetation+indices%22+%2B%22irrigation+scheduling%22&sort=relevance_score:desc&per-page=30",
-"https://api.openalex.org/works?search=%22wireless+sensor+networks%22+%2B%22precision+agriculture%22+%2B%22variable+rate+irrigation%22+%2B%22irrigation+automation%22&sort=relevance_score:desc&per-page=30"
-]
+{
+  "queries": [
+    "https://api.openalex.org/works?search=%22precision+irrigation%22+%2B%22soil+moisture+sensors%22+%2B%22irrigation+scheduling%22&sort=relevance_score:desc&per-page=30",
+    "https://api.openalex.org/works?search=%22machine+learning%22+%2B%22irrigation+management%22+%2B%22crop+water+demand+prediction%22&sort=relevance_score:desc&per-page=30",
+    "https://api.openalex.org/works?search=%22IoT+sensors%22+%2B%22real-time%22+%2B%22soil+moisture+monitoring%22+%2B%22crop+water+stress%22&sort=relevance_score:desc&per-page=30",
+    "https://api.openalex.org/works?search=%22remote+sensing%22+%2B%22vegetation+indices%22+%2B%22irrigation+scheduling%22&sort=relevance_score:desc&per-page=30",
+    "https://api.openalex.org/works?search=%22wireless+sensor+networks%22+%2B%22precision+agriculture%22+%2B%22variable+rate+irrigation%22+%2B%22irrigation+automation%22&sort=relevance_score:desc&per-page=30"
+  ]
+}
 
 These example searches demonstrate how to create targeted, effective alex searches. They focus on specific topics, exclude irrelevant results, allow synonym flexibility, and limit to relevant domains when needed. The search terms are carefully selected to balance relevance and specificity while avoiding being overly restrictive.  By combining relevant keywords, exact phrases, and operators, these searches help generate high-quality results for the given topics.
 """
@@ -4390,7 +4516,7 @@ async def formulate_queries(claim: str, num_queries: int, query_type: str) -> Li
     Returns:
         List[str]: A list of generated search queries.
     """
-    handler = LLMHandler()
+    handler = Handler()
 
     if query_type.lower() == 'scopus':
         search_guidance = SCOPUS_SEARCH_GUIDE
@@ -4406,15 +4532,28 @@ async def formulate_queries(claim: str, num_queries: int, query_type: str) -> Li
         QUERY_TYPE=query_type
     )
 
-    response = await handler.query(prompt, model="gpt_4o_mini", sync=False)
+    response = await handler.query(prompt, model="gpt_4o_mini", json_mode=True)
     
-    try:
-        queries = json.loads(response)
-        if not isinstance(queries, list) or len(queries) != num_queries:
-            raise ValueError("Invalid response format")
-        return queries
-    except json.JSONDecodeError:
-        raise ValueError("Failed to parse the response as JSON")
+    if isinstance(response, str):
+        try:
+            parsed_response = json.loads(response)
+        except json.JSONDecodeError:
+            raise ValueError("Failed to parse LLM response as JSON")
+    elif isinstance(response, dict):
+        parsed_response = response
+    else:
+        raise ValueError("Unexpected response format from LLM")
+
+    if "queries" not in parsed_response or not isinstance(parsed_response["queries"], list):
+        raise ValueError("Invalid response format: 'queries' list not found")
+
+    queries = parsed_response["queries"]
+    print(queries)  
+
+    if len(queries) != num_queries:
+        raise ValueError(f"Expected {num_queries} queries, but got {len(queries)}")
+
+    return queries
         </content>
     </file>
     <file>
@@ -4700,7 +4839,6 @@ class ScopusSearch(BaseSearch):
                 authors=[author.get("authname", "") for author in entry.get("author", [])],
                 year=year,
                 abstract=entry.get("dc:description", ""),
-                pdf_link=entry.get("prism:url", ""),  # Using prism:url as a potential full text link
                 source=entry.get("prism:publicationName", ""),
                 metadata={
                     "citation_count": citation_count,

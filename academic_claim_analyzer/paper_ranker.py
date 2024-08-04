@@ -11,7 +11,7 @@ import logging
 logger = logging.getLogger(__name__)
 
 RANKING_PROMPT = """
-Analyze the relevance of the following papers to the claim: "{claim}"
+Analyze the relevance of the following papers to the query: "{claim}"
 
 Papers:
 {paper_summaries}
@@ -40,7 +40,7 @@ Ensure that each paper is assigned a unique rank from 1 to {num_papers}, where 1
 """
 
 ANALYSIS_PROMPT = """
-Provide a detailed, technical analysis of the following paper's relevance to the claim: "{claim}"
+Provide a detailed, technical analysis of the following paper's relevance to the query: "{claim}"
 
 Paper Full Text: {full_text}
 

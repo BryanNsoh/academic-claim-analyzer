@@ -27,10 +27,7 @@ with open('README.md', 'r', encoding='utf-8') as f:
 
 setup(
     name='academic-claim-analyzer',
-    use_scm_version={
-        "local_scheme": "no-local-version",
-        "version_scheme": "no-guess-dev",
-    },
+    use_scm_version=True,
     setup_requires=['setuptools_scm'],
     author='Bryan Nsoh',
     author_email='bryan.anye.5@gmail.com',

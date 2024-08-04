@@ -6,6 +6,3 @@ build-backend = "setuptools.build_meta"
 write_to = "academic_claim_analyzer/_version.py"
 version_scheme = "no-guess-dev"
 local_scheme = "no-local-version"
-
-[tool.setuptools_scm.version_scheme]
-use_local_version_identifier = false

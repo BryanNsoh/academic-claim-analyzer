@@ -1,4 +1,4 @@
-Context extraction timestamp: 20240804_140415
+Context extraction timestamp: 20240804_143019
 
 <repository_structure>
 <directory name="academic-claim-analyzer">
@@ -34,16 +34,6 @@ sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
         <content>Full content not provided</content>
     </file>
     <file>
-        <name>LICENSE</name>
-        <path>LICENSE</path>
-        <content>Full content not provided</content>
-    </file>
-    <file>
-        <name>README.md</name>
-        <path>README.md</path>
-        <content>Full content not provided</content>
-    </file>
-    <file>
         <name>repo_context_extractor.py</name>
         <path>repo_context_extractor.py</path>
         <content>
@@ -52,6 +42,7 @@ import datetime
 
 EXCLUDED_DIRS = {".git", "__pycache__", "node_modules", ".venv"}
 FULL_CONTENT_EXTENSIONS = {".py", ".toml", ".dbml", ".yaml"}
+ALWAYS_INCLUDE_FILES = {"requirements.txt", "LICENSE", "README.md"}
 
 def create_file_element(file_path, root_folder):
     relative_path = os.path.relpath(file_path, root_folder)
@@ -62,7 +53,7 @@ def create_file_element(file_path, root_folder):
         f"    <file>\n        <name>{file_name}</name>\n        <path>{relative_path}</path>\n"
     ]
 
-    if file_extension in FULL_CONTENT_EXTENSIONS:
+    if file_extension in FULL_CONTENT_EXTENSIONS or file_name in ALWAYS_INCLUDE_FILES:
         file_element.append("        <content>\n")
         try:
             with open(file_path, "r", encoding="utf-8") as file:
@@ -78,6 +69,7 @@ def create_file_element(file_path, root_folder):
 
 def get_repo_structure(root_folder):
     structure = ["<repository_structure>\n"]
+    always_include_files = []
 
     for subdir, dirs, files in os.walk(root_folder):
         dirs[:] = [d for d in dirs if d not in EXCLUDED_DIRS]
@@ -88,9 +80,17 @@ def get_repo_structure(root_folder):
         structure.append(f'{indent}<directory name="{os.path.basename(subdir)}">\n')
         for file in files:
             file_path = os.path.join(subdir, file)
-            file_element = create_file_element(file_path, root_folder)
-            structure.append(file_element)
+            if file in ALWAYS_INCLUDE_FILES:
+                always_include_files.append((file_path, root_folder))
+            else:
+                file_element = create_file_element(file_path, root_folder)
+                structure.append(file_element)
         structure.append(f"{indent}</directory>\n")
+
+    # Add always included files at the end of the structure
+    for file_path, root_folder in always_include_files:
+        file_element = create_file_element(file_path, root_folder)
+        structure.append(file_element)
 
     structure.append("</repository_structure>\n")
     return "".join(structure)
@@ -118,11 +118,6 @@ def main():
 if __name__ == "__main__":
     main()
         </content>
-    </file>
-    <file>
-        <name>requirements.txt</name>
-        <path>requirements.txt</path>
-        <content>Full content not provided</content>
     </file>
     <file>
         <name>scraper.log</name>
@@ -214,11 +209,6 @@ setup(
     <file>
         <name>entry_points.txt</name>
         <path>.eggs\setuptools_scm-8.1.0-py3.11.egg\EGG-INFO\entry_points.txt</path>
-        <content>Full content not provided</content>
-    </file>
-    <file>
-        <name>LICENSE</name>
-        <path>.eggs\setuptools_scm-8.1.0-py3.11.egg\EGG-INFO\LICENSE</path>
         <content>Full content not provided</content>
     </file>
     <file>
@@ -3671,11 +3661,6 @@ def load_toml_or_inline_map(data: str | None) -> dict[str, Any]:
         <path>.pytest_cache\CACHEDIR.TAG</path>
         <content>Full content not provided</content>
     </file>
-    <file>
-        <name>README.md</name>
-        <path>.pytest_cache\README.md</path>
-        <content>Full content not provided</content>
-    </file>
     </directory>
         <directory name="v">
         </directory>
@@ -3707,9 +3692,9 @@ import asyncio
 import json
 import os
 from datetime import datetime
-from typing import List, Dict
+from typing import List, Dict, Any
 from .main import analyze_claim
-from .models import ClaimAnalysis
+from .models import ClaimAnalysis, RankedPaper
 
 async def process_claims(claims: List[str], **kwargs) -> Dict[str, ClaimAnalysis]:
     results = {}
@@ -3722,7 +3707,7 @@ async def process_claims(claims: List[str], **kwargs) -> Dict[str, ClaimAnalysis
             print(f"Error details: {str(e)}")
     return results
 
-def batch_analyze_claims(claims: List[str], output_dir: str, **kwargs) -> Dict[str, ClaimAnalysis]:
+def batch_analyze_claims(claims: List[str], output_dir: str, num_top_papers: int = 5, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
     results = asyncio.run(process_claims(claims, **kwargs))
     
     # Ensure the output directory exists
@@ -3733,86 +3718,73 @@ def batch_analyze_claims(claims: List[str], output_dir: str, **kwargs) -> Dict[s
     filename = f"claim_analysis_results_{timestamp}.json"
     filepath = os.path.join(output_dir, filename)
     
-    # Serialize the results to JSON
-    serialized_results = {}
+    # Process and serialize the results
+    processed_results = {}
     for claim, analysis in results.items():
-        serialized_results[claim] = analysis.to_dict()  # Assume ClaimAnalysis has a to_dict method
+        top_papers = analysis.get_top_papers(num_top_papers)
+        processed_results[claim] = [
+            {
+                "title": paper.title,
+                "authors": paper.authors,
+                "year": paper.year,
+                "doi": paper.doi,
+                "relevance_score": paper.relevance_score,
+                "relevant_quotes": paper.relevant_quotes,
+                "analysis": paper.analysis,
+                "bibtex": paper.bibtex
+            }
+            for paper in top_papers
+        ]
     
     # Write the results to a JSON file
     with open(filepath, 'w', encoding='utf-8') as f:
-        json.dump(serialized_results, f, ensure_ascii=False, indent=2)
+        json.dump(processed_results, f, ensure_ascii=False, indent=2)
     
     print(f"Results stored in: {filepath}")
     
-    return results
+    return processed_results
 
-def print_results_summary(results: Dict[str, ClaimAnalysis]):
+def print_results_summary(results: Dict[str, List[Dict[str, Any]]]):
     print("\nResults Summary:")
-    for claim, analysis in results.items():
+    for claim, papers in results.items():
         print(f"\nClaim: {claim}")
-        print(f"Number of queries generated: {len(analysis.queries)}")
-        print(f"Total papers found: {len(analysis.search_results)}")
-        print(f"Number of ranked papers: {len(analysis.ranked_papers)}")
+        print(f"Number of top papers: {len(papers)}")
 
-def print_detailed_result(claim: str, analysis: ClaimAnalysis):
+def print_detailed_result(claim: str, papers: List[Dict[str, Any]]):
     print("\nDetailed Result for Claim:")
     print(f"Claim: {claim}")
-    print(f"\nQueries generated:")
-    for query in analysis.queries:
-        print(f"- {query}")
     print(f"\nTop ranked papers:")
-    for paper in analysis.get_top_papers(analysis.parameters["num_papers_to_return"]):
-        print(f"\nTitle: {paper.title}")
-        print(f"Authors: {', '.join(paper.authors)}")
-        print(f"Year: {paper.year}")
-        print(f"DOI: {paper.doi}")
-        print(f"Relevance Score: {paper.relevance_score}")
-        print(f"Analysis: {paper.analysis}")
+    for paper in papers:
+        print(f"\nTitle: {paper['title']}")
+        print(f"Authors: {', '.join(paper['authors'])}")
+        print(f"Year: {paper['year']}")
+        print(f"DOI: {paper['doi']}")
+        print(f"Relevance Score: {paper['relevance_score']}")
+        print(f"Analysis: {paper['analysis']}")
         print("Relevant Quotes:")
-        for quote in paper.relevant_quotes:
+        for quote in paper['relevant_quotes']:
             print(f"- {quote}")
+        print("BibTeX:")
+        print(paper['bibtex'])
 
-def print_schema(results: Dict[str, ClaimAnalysis]):
-    sample_analysis = next(iter(results.values()))
+def print_schema(results: Dict[str, List[Dict[str, Any]]]):
+    sample_paper = next(iter(results.values()))[0]
     schema = {
         "claim": "string",
-        "queries": ["string"],
-        "search_results": [
+        "papers": [
             {
                 "title": "string",
                 "authors": ["string"],
                 "year": "int",
                 "doi": "string",
-                "abstract": "string",
-                "source": "string",
-                "full_text": "string (optional)",
-                "pdf_link": "string (optional)",
-                "metadata": {
-                    "key": "value"
-                }
-            }
-        ],
-        "ranked_papers": [
-            {
-                "title": "string",
-                "authors": ["string"],
-                "year": "int",
-                "doi": "string",
-                "abstract": "string",
-                "source": "string",
-                "full_text": "string (optional)",
-                "pdf_link": "string (optional)",
-                "metadata": {
-                    "key": "value"
-                },
                 "relevance_score": "float",
                 "relevant_quotes": ["string"],
-                "analysis": "string"
+                "analysis": "string",
+                "bibtex": "string"
             }
-        ],
-        "parameters": sample_analysis.parameters
+        ]
     }
-    print("\nSchema of ClaimAnalysis object:")
+    print("\nSchema of result object:")
     print(json.dumps(schema, indent=2))
 
 def main():
@@ -3822,7 +3794,7 @@ def main():
         "Mindfulness meditation may help reduce symptoms of anxiety and depression.",
     ]
 
-    results = batch_analyze_claims(claims, output_dir=r"C:\Users\bnsoh2\Desktop\test", num_queries=2, papers_per_query=3, num_papers_to_return=2)
+    results = batch_analyze_claims(claims, output_dir=r"C:\Users\bnsoh2\Desktop\test", num_queries=2, papers_per_query=3, num_top_papers=2)
 
     print_results_summary(results)
     first_claim = next(iter(results))
@@ -3992,6 +3964,7 @@ class RankedPaper(Paper):
     relevance_score: float = None
     relevant_quotes: List[str] = field(default_factory=list)
     analysis: str = ""
+    bibtex: str = ""
         
 @dataclass
 class ClaimAnalysis:
@@ -4043,7 +4016,9 @@ import random
 from typing import List, Dict
 from .models import Paper, RankedPaper
 from async_llm_handler import Handler
+from .search.bibtex import get_bibtex_from_doi, get_bibtex_from_title
 import logging
+
 
 logger = logging.getLogger(__name__)
 
@@ -4299,6 +4274,11 @@ async def rank_papers(papers: List[Paper], claim: str, num_rounds: int = 3, top_
             analysis=analysis['analysis'],
             relevant_quotes=analysis['relevant_quotes']
         )
+        # Generate BibTeX
+        bibtex = get_bibtex_from_doi(ranked_paper.doi) if ranked_paper.doi else None
+        if not bibtex:
+            bibtex = get_bibtex_from_title(ranked_paper.title, ranked_paper.authors, ranked_paper.year)
+        ranked_paper.bibtex = bibtex or ""
         ranked_papers.append(ranked_paper)
     
     logger.info(f"Completed paper ranking. Top score: {ranked_papers[0].relevance_score:.2f}, Bottom score: {ranked_papers[-1].relevance_score:.2f}")
@@ -4984,7 +4964,55 @@ class BaseSearch(ABC):
         <name>bibtex.py</name>
         <path>academic_claim_analyzer\search\bibtex.py</path>
         <content>
+# academic_claim_analyzer/search/bibtex.py
 
+import requests
+from typing import Optional
+
+def get_bibtex_from_doi(doi: str) -> Optional[str]:
+    """
+    Fetch BibTeX data for a given DOI using the Crossref API.
+    """
+    url = f"https://api.crossref.org/works/{doi}/transform/application/x-bibtex"
+    response = requests.get(url)
+    if response.status_code == 200:
+        return response.text
+    return None
+
+def get_bibtex_from_title(title: str, authors: list, year: int) -> Optional[str]:
+    """
+    Search for a paper using its title, authors, and year, then fetch its BibTeX data using the Crossref API.
+    """
+    query = f"{title} {' '.join(authors)} {year}"
+    url = f"https://api.crossref.org/works?query={query}&rows=1"
+    response = requests.get(url)
+    if response.status_code == 200:
+        data = response.json()
+        if data['message']['items']:
+            doi = data['message']['items'][0].get('DOI')
+            if doi:
+                return get_bibtex_from_doi(doi)
+    return None
+
+# Test with main code
+def main():
+    # Example 1: Get BibTeX from DOI
+    doi = "10.1016/j.ifacol.2020.12.237"
+    bibtex_from_doi = get_bibtex_from_doi(doi)
+    print("BibTeX from DOI:")
+    print(bibtex_from_doi)
+    print("\n")
+
+    # Example 2: Get BibTeX from title, authors, and year
+    title = "Optimal control of greenhouse climate using PID and MPC algorithms"
+    authors = ["Hasni", "A.", "Taibi", "R.", "Draoui", "B.", "Boulard", "T."]
+    year = 2020
+    bibtex_from_title = get_bibtex_from_title(title, authors, year)
+    print("BibTeX from title, authors, and year:")
+    print(bibtex_from_title)
+
+if __name__ == "__main__":
+    main()
         </content>
     </file>
     <file>
@@ -5741,4 +5769,79 @@ async def test_scopus_search_error():
         </content>
     </file>
         </directory>
+    <file>
+        <name>LICENSE</name>
+        <path>LICENSE</path>
+        <content>
+
+        </content>
+    </file>
+    <file>
+        <name>README.md</name>
+        <path>README.md</path>
+        <content>
+
+        </content>
+    </file>
+    <file>
+        <name>requirements.txt</name>
+        <path>requirements.txt</path>
+        <content>
+# src/requirements.txt
+
+aiohttp
+anthropic
+google-generativeai
+openai
+python-dotenv
+tiktoken
+asyncio
+pytest
+pytest-asyncio
+beautifulsoup4
+PyMuPDF
+playwright==1.36.0
+fake-useragent
+async-llm-handler
+        </content>
+    </file>
+    <file>
+        <name>LICENSE</name>
+        <path>.eggs\setuptools_scm-8.1.0-py3.11.egg\EGG-INFO\LICENSE</path>
+        <content>
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+        </content>
+    </file>
+    <file>
+        <name>README.md</name>
+        <path>.pytest_cache\README.md</path>
+        <content>
+# pytest cache directory #
+
+This directory contains data from the pytest's cache plugin,
+which provides the `--lf` and `--ff` options, as well as the `cache` fixture.
+
+**Do not** commit this to version control.
+
+See [the docs](https://docs.pytest.org/en/stable/how-to/cache.html) for more information.
+
+        </content>
+    </file>
 </repository_structure>

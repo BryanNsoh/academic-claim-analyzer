@@ -1,25 +1,26 @@
-# setup.py
 import subprocess
 import sys
 from setuptools import setup, find_packages
 from setuptools.command.develop import develop
 from setuptools.command.install import install
 
+def install_playwright_browsers():
+    try:
+        subprocess.check_call([sys.executable, "-m", "playwright", "install"])
+    except subprocess.CalledProcessError:
+        print("Failed to install Playwright browsers. Please run 'playwright install' manually after installation.")
+    except FileNotFoundError:
+        print("Playwright not found. Please install it manually after installation.")
+
 class PostInstallCommand(install):
     def run(self):
         install.run(self)
-        self.install_playwright_browsers()
-
-    def install_playwright_browsers(self):
-        subprocess.check_call([sys.executable, "-m", "playwright", "install"])
+        self.execute(install_playwright_browsers, (), msg="Installing Playwright browsers")
 
 class PostDevelopCommand(develop):
     def run(self):
         develop.run(self)
-        self.install_playwright_browsers()
-
-    def install_playwright_browsers(self):
-        subprocess.check_call([sys.executable, "-m", "playwright", "install"])
+        self.execute(install_playwright_browsers, (), msg="Installing Playwright browsers")
 
 with open('README.md', 'r', encoding='utf-8') as f:
     long_description = f.read()

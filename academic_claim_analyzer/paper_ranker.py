@@ -20,6 +20,7 @@ Rank these papers from most to least relevant based on the following criteria:
 1. Direct relevance to the claim (either supporting or refuting it)
 2. Quality and reliability of the research
 3. Recency and impact of the findings
+4. Prescence of relevant information. If methods or results section are not present in full detail, the paper cannot be considered evaluative of the claim and should be ranked lower.
 
 Focus primarily on the full text content of each paper. Other metadata (title, authors, etc.) may be missing or incomplete, but should not significantly affect your ranking if the full text is present.
 

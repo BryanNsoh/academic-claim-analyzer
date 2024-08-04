@@ -6,7 +6,9 @@ import random
 from typing import List, Dict
 from .models import Paper, RankedPaper
 from async_llm_handler import Handler
+from .search.bibtex import get_bibtex_from_doi, get_bibtex_from_title
 import logging
+
 
 logger = logging.getLogger(__name__)
 
@@ -262,6 +264,11 @@ async def rank_papers(papers: List[Paper], claim: str, num_rounds: int = 3, top_
             analysis=analysis['analysis'],
             relevant_quotes=analysis['relevant_quotes']
         )
+        # Generate BibTeX
+        bibtex = get_bibtex_from_doi(ranked_paper.doi) if ranked_paper.doi else None
+        if not bibtex:
+            bibtex = get_bibtex_from_title(ranked_paper.title, ranked_paper.authors, ranked_paper.year)
+        ranked_paper.bibtex = bibtex or ""
         ranked_papers.append(ranked_paper)
     
     logger.info(f"Completed paper ranking. Top score: {ranked_papers[0].relevance_score:.2f}, Bottom score: {ranked_papers[-1].relevance_score:.2f}")

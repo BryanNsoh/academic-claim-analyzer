@@ -4,9 +4,9 @@ import asyncio
 import json
 import os
 from datetime import datetime
-from typing import List, Dict
+from typing import List, Dict, Any
 from .main import analyze_claim
-from .models import ClaimAnalysis
+from .models import ClaimAnalysis, RankedPaper
 
 async def process_claims(claims: List[str], **kwargs) -> Dict[str, ClaimAnalysis]:
     results = {}
@@ -19,7 +19,7 @@ async def process_claims(claims: List[str], **kwargs) -> Dict[str, ClaimAnalysis
             print(f"Error details: {str(e)}")
     return results
 
-def batch_analyze_claims(claims: List[str], output_dir: str, **kwargs) -> Dict[str, ClaimAnalysis]:
+def batch_analyze_claims(claims: List[str], output_dir: str, num_top_papers: int = 5, **kwargs) -> Dict[str, List[Dict[str, Any]]]:
     results = asyncio.run(process_claims(claims, **kwargs))
     
     # Ensure the output directory exists
@@ -30,86 +30,73 @@ def batch_analyze_claims(claims: List[str], output_dir: str, **kwargs) -> Dict[s
     filename = f"claim_analysis_results_{timestamp}.json"
     filepath = os.path.join(output_dir, filename)
     
-    # Serialize the results to JSON
-    serialized_results = {}
+    # Process and serialize the results
+    processed_results = {}
     for claim, analysis in results.items():
-        serialized_results[claim] = analysis.to_dict()  # Assume ClaimAnalysis has a to_dict method
+        top_papers = analysis.get_top_papers(num_top_papers)
+        processed_results[claim] = [
+            {
+                "title": paper.title,
+                "authors": paper.authors,
+                "year": paper.year,
+                "doi": paper.doi,
+                "relevance_score": paper.relevance_score,
+                "relevant_quotes": paper.relevant_quotes,
+                "analysis": paper.analysis,
+                "bibtex": paper.bibtex
+            }
+            for paper in top_papers
+        ]
     
     # Write the results to a JSON file
     with open(filepath, 'w', encoding='utf-8') as f:
-        json.dump(serialized_results, f, ensure_ascii=False, indent=2)
+        json.dump(processed_results, f, ensure_ascii=False, indent=2)
     
     print(f"Results stored in: {filepath}")
     
-    return results
+    return processed_results
 
-def print_results_summary(results: Dict[str, ClaimAnalysis]):
+def print_results_summary(results: Dict[str, List[Dict[str, Any]]]):
     print("\nResults Summary:")
-    for claim, analysis in results.items():
+    for claim, papers in results.items():
         print(f"\nClaim: {claim}")
-        print(f"Number of queries generated: {len(analysis.queries)}")
-        print(f"Total papers found: {len(analysis.search_results)}")
-        print(f"Number of ranked papers: {len(analysis.ranked_papers)}")
+        print(f"Number of top papers: {len(papers)}")
 
-def print_detailed_result(claim: str, analysis: ClaimAnalysis):
+def print_detailed_result(claim: str, papers: List[Dict[str, Any]]):
     print("\nDetailed Result for Claim:")
     print(f"Claim: {claim}")
-    print(f"\nQueries generated:")
-    for query in analysis.queries:
-        print(f"- {query}")
     print(f"\nTop ranked papers:")
-    for paper in analysis.get_top_papers(analysis.parameters["num_papers_to_return"]):
-        print(f"\nTitle: {paper.title}")
-        print(f"Authors: {', '.join(paper.authors)}")
-        print(f"Year: {paper.year}")
-        print(f"DOI: {paper.doi}")
-        print(f"Relevance Score: {paper.relevance_score}")
-        print(f"Analysis: {paper.analysis}")
+    for paper in papers:
+        print(f"\nTitle: {paper['title']}")
+        print(f"Authors: {', '.join(paper['authors'])}")
+        print(f"Year: {paper['year']}")
+        print(f"DOI: {paper['doi']}")
+        print(f"Relevance Score: {paper['relevance_score']}")
+        print(f"Analysis: {paper['analysis']}")
         print("Relevant Quotes:")
-        for quote in paper.relevant_quotes:
+        for quote in paper['relevant_quotes']:
             print(f"- {quote}")
+        print("BibTeX:")
+        print(paper['bibtex'])
 
-def print_schema(results: Dict[str, ClaimAnalysis]):
-    sample_analysis = next(iter(results.values()))
+def print_schema(results: Dict[str, List[Dict[str, Any]]]):
+    sample_paper = next(iter(results.values()))[0]
     schema = {
         "claim": "string",
-        "queries": ["string"],
-        "search_results": [
+        "papers": [
             {
                 "title": "string",
                 "authors": ["string"],
                 "year": "int",
                 "doi": "string",
-                "abstract": "string",
-                "source": "string",
-                "full_text": "string (optional)",
-                "pdf_link": "string (optional)",
-                "metadata": {
-                    "key": "value"
-                }
-            }
-        ],
-        "ranked_papers": [
-            {
-                "title": "string",
-                "authors": ["string"],
-                "year": "int",
-                "doi": "string",
-                "abstract": "string",
-                "source": "string",
-                "full_text": "string (optional)",
-                "pdf_link": "string (optional)",
-                "metadata": {
-                    "key": "value"
-                },
                 "relevance_score": "float",
                 "relevant_quotes": ["string"],
-                "analysis": "string"
+                "analysis": "string",
+                "bibtex": "string"
             }
-        ],
-        "parameters": sample_analysis.parameters
+        ]
     }
-    print("\nSchema of ClaimAnalysis object:")
+    print("\nSchema of result object:")
     print(json.dumps(schema, indent=2))
 
 def main():
@@ -119,7 +106,7 @@ def main():
         "Mindfulness meditation may help reduce symptoms of anxiety and depression.",
     ]
 
-    results = batch_analyze_claims(claims, output_dir=r"C:\Users\bnsoh2\Desktop\test", num_queries=2, papers_per_query=3, num_papers_to_return=2)
+    results = batch_analyze_claims(claims, output_dir=r"C:\Users\bnsoh2\Desktop\test", num_queries=2, papers_per_query=3, num_top_papers=2)
 
     print_results_summary(results)
     first_claim = next(iter(results))

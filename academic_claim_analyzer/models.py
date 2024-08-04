@@ -29,6 +29,7 @@ class RankedPaper(Paper):
     relevance_score: float = None
     relevant_quotes: List[str] = field(default_factory=list)
     analysis: str = ""
+    bibtex: str = ""
         
 @dataclass
 class ClaimAnalysis:

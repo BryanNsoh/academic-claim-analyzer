@@ -186,7 +186,7 @@ async def analyze_paper(handler: Handler, claim: str, paper: Paper) -> Dict[str,
         logger.error(f"Error during paper analysis: {str(e)}")
         return {"analysis": "", "relevant_quotes": []}
 
-async def rank_papers(papers: List[Paper], claim: str, num_rounds: int = 3, top_n: int = 5) -> List[RankedPaper]:
+async def rank_papers(papers: List[Paper], claim: str, num_rounds: int = 7, top_n: int = 5) -> List[RankedPaper]:
     """Rank papers based on their relevance to the given claim."""
     handler = Handler()
     

@@ -184,7 +184,4 @@ async def formulate_queries(claim: str, num_queries: int, query_type: str) -> Li
     queries = parsed_response["queries"]
     print(queries)  
 
-    if len(queries) != num_queries:
-        raise ValueError(f"Expected {num_queries} queries, but got {len(queries)}")
-
     return queries

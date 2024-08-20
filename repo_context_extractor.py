@@ -2,8 +2,7 @@ import os
 import datetime
 
 EXCLUDED_DIRS = {".git", "__pycache__", "node_modules", ".venv"}
-FULL_CONTENT_EXTENSIONS = {".py", ".toml", ".dbml", ".yaml"}
-ALWAYS_INCLUDE_FILES = {"requirements.txt", "LICENSE", "README.md"}
+FULL_CONTENT_EXTENSIONS = {".py", ".toml", ".dbml", ".yaml", ".json", ".txt", ".md"}
 
 def create_file_element(file_path, root_folder):
     relative_path = os.path.relpath(file_path, root_folder)
@@ -14,7 +13,7 @@ def create_file_element(file_path, root_folder):
         f"    <file>\n        <name>{file_name}</name>\n        <path>{relative_path}</path>\n"
     ]
 
-    if file_extension in FULL_CONTENT_EXTENSIONS or file_name in ALWAYS_INCLUDE_FILES:
+    if file_extension in FULL_CONTENT_EXTENSIONS:
         file_element.append("        <content>\n")
         try:
             with open(file_path, "r", encoding="utf-8") as file:
@@ -30,7 +29,6 @@ def create_file_element(file_path, root_folder):
 
 def get_repo_structure(root_folder):
     structure = ["<repository_structure>\n"]
-    always_include_files = []
 
     for subdir, dirs, files in os.walk(root_folder):
         dirs[:] = [d for d in dirs if d not in EXCLUDED_DIRS]
@@ -41,17 +39,9 @@ def get_repo_structure(root_folder):
         structure.append(f'{indent}<directory name="{os.path.basename(subdir)}">\n')
         for file in files:
             file_path = os.path.join(subdir, file)
-            if file in ALWAYS_INCLUDE_FILES:
-                always_include_files.append((file_path, root_folder))
-            else:
-                file_element = create_file_element(file_path, root_folder)
-                structure.append(file_element)
+            file_element = create_file_element(file_path, root_folder)
+            structure.append(file_element)
         structure.append(f"{indent}</directory>\n")
-
-    # Add always included files at the end of the structure
-    for file_path, root_folder in always_include_files:
-        file_element = create_file_element(file_path, root_folder)
-        structure.append(file_element)
 
     structure.append("</repository_structure>\n")
     return "".join(structure)

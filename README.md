@@ -66,13 +66,23 @@ To process multiple sets of claims using YAML files:
 ```yaml
 - claim_set_id: health_claims_set_1
   claims:
-    - "Coffee consumption is associated with reduced risk of type 2 diabetes."
-    - "Regular exercise improves cardiovascular health in older adults."
+    - "To what extent does regular coffee consumption influence the risk of developing type 2 diabetes mellitus in adults, as evidenced by long-term prospective cohort studies and meta-analyses?"
+    - "What is the impact of structured aerobic exercise programs on specific cardiovascular health markers in older adults, and how does this effect vary with exercise intensity and duration?"
 
 - claim_set_id: environmental_claims_set
   claims:
-    - "Renewable energy sources can significantly reduce greenhouse gas emissions."
-    - "Deforestation is a major contributor to climate change."
+    - "How do the lifecycle greenhouse gas emissions of renewable energy sources (wind, solar, hydroelectric) compare to those of fossil fuel-based energy production when considering both operational and infrastructure-related emissions?"
+    - "What is the quantifiable contribution of tropical deforestation to global anthropogenic carbon dioxide emissions, and how has this contribution changed over the past two decades based on satellite imagery and ground-based measurements?"
+
+- claim_set_id: technology_claims_set
+  claims:
+    - "How is the increasing adoption of artificial intelligence and machine learning technologies likely to impact job markets across various sectors in the next decade, considering both job displacement and creation?"
+    - "What are the potential applications and limitations of blockchain technology in improving supply chain transparency and efficiency, and how do these vary across different industries?"
+
+- claim_set_id: social_science_claims_set
+  claims:
+    - "How does early childhood exposure to bilingual environments affect cognitive development and executive function in children aged 3-8, as measured by standardized cognitive assessments?"
+    - "To what extent do social media usage patterns correlate with self-reported measures of mental health and well-being in adolescents and young adults, accounting for potential confounding variables?"
 ```
 
 2. Use the following code to process the claims:

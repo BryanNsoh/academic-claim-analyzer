@@ -42,7 +42,7 @@ Ensure that each paper is assigned a unique rank from 1 to {num_papers}, where 1
 """
 
 ANALYSIS_PROMPT = """
-Provide a detailed, technical analysis of the following paper's relevance to the query: "{claim}"
+Provide a super detailed, ultra technical analysis of the following paper's relevance to the query: "{claim}"
 
 Paper Full Text: {full_text}
 
@@ -55,23 +55,23 @@ Abstract: {abstract}
 
 Your response must be in the following JSON format:
 {{
-  "analysis": "string",
+  "analysis": "string, 500 words minimum",
   "relevant_quotes": [
-    "string",
-    "string",
-    "string"
+    "string, 100 words minimum. Really extract a big chunk of what you think is the crux of the paper",
+    "string, 100 words minimum. Really extract a big chunk of what you think is the crux of the paper",
+    "string, 100 words minimum. Really extract a big chunk of what you think is the crux of the paper"
   ]
 }}
 
 In the analysis:
 1. Evaluate how directly the paper addresses the claim, either supporting or refuting it.
-2. Assess the methodology, sample size, and statistical significance of the findings.
+2. Assess the methodology, sample size, and statistical significance of the findings if relevant.
 3. Consider any limitations or potential biases in the study.
-4. Discuss how the paper's findings contribute to the broader understanding of the claim.
+4. Discuss how the paper's findings contribute to the broader understanding of the claim. Devote most of your time to this.
 
 Extract exactly three relevant quotes from the paper that best support your analysis. These should be verbatim excerpts that directly relate to the claim.
 
-Ensure your analysis is highly precise, technical, and grounded in the paper's content. Avoid general statements and focus on specific details from the study.
+Ensure your analysis is highly precise, technical, and grounded in the paper's content. Avoid general statements and focus on ultra specific details from the methods, results, and discussion sections.
 """
 
 
@@ -247,6 +247,11 @@ async def rank_papers(papers: List[Paper], claim: str, num_rounds: int = 7, top_
     
     # Sort papers by average score
     sorted_papers = sorted(unique_papers, key=lambda p: average_scores[p.id], reverse=True)
+    
+    print("\nScores of all papers:")
+    for paper in sorted_papers:
+        print(f"Paper ID: {paper.id}, Title: {paper.title}, Average Score: {average_scores[paper.id]:.2f}")
+
     
     # Analyze top N papers
     top_papers = sorted_papers[:top_n]

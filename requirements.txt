@@ -1,8 +1,6 @@
 # src/requirements.txt
 
 aiohttp
-anthropic
-google-generativeai
 openai
 python-dotenv
 tiktoken

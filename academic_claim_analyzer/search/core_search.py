@@ -10,7 +10,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-load_dotenv()
+load_dotenv(override=True)
 
 class CORESearch(BaseSearch):
     def __init__(self):

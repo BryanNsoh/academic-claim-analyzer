@@ -108,10 +108,10 @@ def print_schema(results: Dict[str, List[Dict[str, Any]]]):
     print(json.dumps(schema, indent=2))
 
 def main():
-    yaml_file = r"C:\Users\bnsoh2\OneDrive - University of Nebraska-Lincoln\Projects\Students\Bryan Nsoh\Papers\mqtt_gcp_iot\draft1\initial_papers\followup_claims.yaml"
+    yaml_file = r"C:\Users\bnsoh2\OneDrive - University of Nebraska-Lincoln\Projects\Students\Bryan Nsoh\Papers\mqtt_gcp_iot\draft3\new_claims_v1\initial_claims.yaml"
     claims_data = load_claims_from_yaml(yaml_file)
     batch_analyze_claims(claims_data, output_dir=r"C:\Users\bnsoh2\OneDrive - University of Nebraska-Lincoln\Projects\Students\Bryan Nsoh\Papers\mqtt_gcp_iot\draft1\initial_papers\search_results", 
-                         num_queries=7, papers_per_query=7, num_top_papers=3)
+                         num_queries=7, papers_per_query=7, num_top_papers=1)
 
 if __name__ == "__main__":
     main()

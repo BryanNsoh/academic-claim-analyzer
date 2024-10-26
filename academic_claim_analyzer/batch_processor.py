@@ -163,8 +163,8 @@ def main():
         batch_analyze_claims(
             claims_data,
             output_dir,
-            num_queries=2,
-            papers_per_query=2,
+            num_queries=5,
+            papers_per_query=7,
             num_papers_to_return=1,
             log_level='INFO'
         )

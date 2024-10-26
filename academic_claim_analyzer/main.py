@@ -399,7 +399,13 @@ async def _rank_papers(analysis: ClaimAnalysis) -> None:
         return
     
     try:
-        ranked_papers = await rank_papers(analysis.search_results, analysis.claim)
+        # Pass the schemas to rank_papers
+        ranked_papers = await rank_papers(
+            papers=analysis.search_results,
+            claim=analysis.claim,
+            exclusion_schema=analysis.exclusion_schema,
+            extraction_schema=analysis.extraction_schema
+        )
         for paper in ranked_papers:
             if isinstance(paper, RankedPaper):
                 analysis.add_ranked_paper(paper)

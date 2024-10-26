@@ -208,7 +208,7 @@ async def _conduct_ranking_rounds(valid_papers: List[Paper], claim: str, num_rou
         batch_responses = await handler.process(
             prompts=prompts,
             model="gpt-4o-mini",
-            mode="async_batch",
+            mode="openai_batch",
             response_format=RankingResponse
         )
 

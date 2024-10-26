@@ -23,11 +23,11 @@ class Config:
     TARGET_FOLDER = "academic_claim_analyzer"  # e.g., "src" or "src/utils"
     CUSTOM_TAGS = [
         {"name": "instructions", "url": None},
-        {"name": "error", "url": None},
-        {
-            "name": "custom_instructions",
-            "url": "https://docs.google.com/document/d/1emAdwa-92zF8Jjx53qkMJX526rzIJ5ZSlxy0H2nrrzg/export?format=txt"
-        }
+        {"name": "output", "url": None},
+        # {
+        #     "name": "custom_instructions",
+        #     "url": "https://docs.google.com/document/d/1emAdwa-92zF8Jjx53qkMJX526rzIJ5ZSlxy0H2nrrzg/export?format=txt"
+        # }
     ]
 
 

@@ -1,0 +1,7 @@
+- claim_set_id: "set_1"
+  claims:
+    - "Coffee consumption is associated with reduced risk of type 2 diabetes."
+    - "Daily exercise improves mental health."
+- claim_set_id: "set_2"
+  claims:
+    - "Urban green spaces enhance community well-being."

@@ -1,82 +1,55 @@
 # academic_claim_analyzer/paper_ranker.py
 
 import asyncio
-import json
 import random
-from typing import List, Dict
-from .models import Paper, RankedPaper
-from async_llm_handler import Handler
-from .search.bibtex import get_bibtex_from_doi, get_bibtex_from_title
 import logging
-
+import math
+from typing import List, Dict, Any, Optional, Type
+from pydantic import BaseModel, Field
+from .models import Paper, RankedPaper
+from .llm_api_handler import LLMAPIHandler
+from .search.bibtex import get_bibtex_from_doi, get_bibtex_from_title
 
 logger = logging.getLogger(__name__)
 
-RANKING_PROMPT = """
-Analyze the relevance of the following papers to the query: "{claim}"
+class Ranking(BaseModel):
+    """Individual paper ranking with explanation."""
+    paper_id: str = Field(description="Unique identifier for the paper")
+    rank: int = Field(description="Rank assigned to the paper")
+    explanation: str = Field(description="Explanation for the ranking")
 
-Papers:
-{paper_summaries}
+class RankingResponse(BaseModel):
+    """Response containing a list of rankings."""
+    rankings: List[Ranking] = Field(description="List of rankings for papers")
 
-Rank these papers from most to least relevant based on the following criteria:
-1. Direct relevance to the claim (either supporting or refuting it)
-2. Quality and reliability of the research
-3. Recency and impact of the findings
-4. Prescence of relevant information. If methods or results section are not present in full detail, the paper cannot be considered evaluative of the claim and should be ranked lower.
+class AnalysisResponse(BaseModel):
+    """Detailed paper analysis with relevant quotes."""
+    analysis: str = Field(description="Detailed analysis of the paper's relevance")
+    relevant_quotes: List[str] = Field(description="List of relevant quotes from the paper")
 
-Focus primarily on the full text content of each paper. Other metadata (title, authors, etc.) may be missing or incomplete, but should not significantly affect your ranking if the full text is present.
+def calculate_ranking_rounds(num_papers: int) -> int:
+    """
+    Calculate optimal number of ranking rounds based on paper count.
+    
+    Strategy:
+    - Minimum 3 rounds for <5 papers to ensure stability
+    - Logarithmic scaling up to 10 rounds maximum
+    - More rounds for more papers, but with diminishing returns
+    """
+    if num_papers < 5:
+        return 3
+    
+    # Logarithmic scaling: log2(n) * 2 + 3
+    # This gives us:
+    # 5 papers = 7 rounds
+    # 10 papers = 8 rounds
+    # 20 papers = 9 rounds
+    # 40+ papers = 10 rounds
+    rounds = min(10, math.floor(math.log2(num_papers) * 2) + 3)
+    return max(3, rounds)  # Ensure at least 3 rounds
 
-Your response should be in the following JSON format:
-{{
-  "rankings": [
-    {{
-      "paper_id": "string",
-      "rank": integer,
-      "explanation": "string"
-    }},
-    ...
-  ]
-}}
-
-Ensure that each paper is assigned a unique rank from 1 to {num_papers}, where 1 is the most relevant. Provide a concise, technical explanation for each ranking, focusing on how the paper's content directly addresses the claim.
-"""
-
-ANALYSIS_PROMPT = """
-Provide a super detailed, ultra technical analysis of the following paper's relevance to the query: "{claim}"
-
-Paper Full Text: {full_text}
-
-Additional metadata (if available):
-Title: {title}
-Authors: {authors}
-Publication Year: {year}
-DOI: {doi}
-Abstract: {abstract}
-
-Your response must be in the following JSON format:
-{{
-  "analysis": "string, 500 words minimum",
-  "relevant_quotes": [
-    "string, 100 words minimum. Really extract a big chunk of what you think is the crux of the paper",
-    "string, 100 words minimum. Really extract a big chunk of what you think is the crux of the paper",
-    "string, 100 words minimum. Really extract a big chunk of what you think is the crux of the paper"
-  ]
-}}
-
-In the analysis:
-1. Evaluate how directly the paper addresses the claim, either supporting or refuting it.
-2. Assess the methodology, sample size, and statistical significance of the findings if relevant.
-3. Consider any limitations or potential biases in the study.
-4. Discuss how the paper's findings contribute to the broader understanding of the claim. Devote most of your time to this.
-
-Extract exactly three relevant quotes from the paper that best support your analysis. These should be verbatim excerpts that directly relate to the claim.
-
-Ensure your analysis is highly precise, technical, and grounded in the paper's content. Avoid general statements and focus on ultra specific details from the methods, results, and discussion sections.
-"""
-
-
-def create_balanced_groups(papers: List[Paper], min_group_size: int = 2, max_group_size: int = 5) -> List[List[Paper]]:
-    """Create balanced groups of papers, ensuring each group has at least min_group_size papers."""
+def create_balanced_groups(papers: List[Dict[str, Any]], min_group_size: int = 2, max_group_size: int = 5) -> List[List[Dict[str, Any]]]:
+    """Create balanced groups of papers for ranking."""
     num_papers = len(papers)
     logger.info(f"Creating balanced groups for {num_papers} papers")
     logger.info(f"min_group_size: {min_group_size}, max_group_size: {max_group_size}")
@@ -90,21 +63,19 @@ def create_balanced_groups(papers: List[Paper], min_group_size: int = 2, max_gro
             logger.info(f"Number of papers ({num_papers}) less than max_group_size ({max_group_size}). Using num_papers as group size.")
             group_size = num_papers
         else:
+            # Calculate optimal group size
             inner_division = num_papers // max_group_size
             logger.info(f"Inner division result: {inner_division}")
             if inner_division == 0:
-                logger.warning(f"Inner division resulted in zero. Using max_group_size ({max_group_size}) as group size.")
                 group_size = max_group_size
             else:
                 group_size = min(max_group_size, max(min_group_size, num_papers // inner_division))
         
         logger.info(f"Calculated group size: {group_size}")
-
-        # Create initial groups
-        groups = [papers[i:i+group_size] for i in range(0, num_papers, group_size)]
+        groups = [papers[i:i + group_size] for i in range(0, num_papers, group_size)]
         
-        # Redistribute papers from the last group if it's too small
-        if len(groups[-1]) < min_group_size:
+        # Handle last group if too small
+        if len(groups[-1]) < min_group_size and len(groups) > 1:
             last_group = groups.pop()
             for i, paper in enumerate(last_group):
                 groups[i % len(groups)].append(paper)
@@ -113,168 +84,290 @@ def create_balanced_groups(papers: List[Paper], min_group_size: int = 2, max_gro
         return groups
 
     except Exception as e:
-        logger.error(f"Error in create_balanced_groups: {str(e)}")
-        logger.error(f"Falling back to single group")
+        logger.error(f"Error in create_balanced_groups: {str(e)}", exc_info=True)
         return [papers]
 
-async def retry_llm_query(handler: Handler, prompt: str, model: str, max_retries: int = 3) -> Dict[str, any]:
-    """Retry LLM query with error handling and JSON parsing."""
-    for attempt in range(max_retries):
-        try:
-            response = await handler.query(prompt, model=model, json_mode=True)
-            if isinstance(response, str):
-                return json.loads(response)
-            return response
-        except json.JSONDecodeError:
-            logger.warning(f"Attempt {attempt + 1}/{max_retries}: Failed to parse LLM response as JSON.")
-            if attempt == max_retries - 1:
-                logger.error(f"All attempts failed. Last response: {response}")
-                raise ValueError("Failed to get valid JSON response after multiple attempts")
-        except Exception as e:
-            logger.error(f"Error during LLM query: {str(e)}")
-            raise
-
-async def rank_group(handler: Handler, claim: str, papers: List[Paper]) -> List[Dict[str, any]]:
-    """Rank a group of papers using the LLM."""
-    paper_summaries = "\n".join([
-        f"Paper ID: {paper.id}\n"
-        f"Full Text: {getattr(paper, 'full_text', 'N/A')[:500]}...\n"
-        f"Title: {getattr(paper, 'title', 'N/A')}\n"
-        f"Abstract: {getattr(paper, 'abstract', 'N/A')[:200]}..."
-        for paper in papers
-    ])
-    prompt = RANKING_PROMPT.format(claim=claim, paper_summaries=paper_summaries, num_papers=len(papers))
-    
-    try:
-        rankings = await retry_llm_query(handler, prompt, model="gpt_4o_mini")
-        print(f"Group Rankings: {rankings}")
-        
-        if isinstance(rankings, dict) and "rankings" in rankings:
-            rankings = rankings["rankings"]
-        
-        if not isinstance(rankings, list) or len(rankings) != len(papers):
-            logger.warning(f"Unexpected rankings format. Expected list of {len(papers)} items, got: {rankings}")
-            raise ValueError("Unexpected rankings format")
-        
-        return rankings
-    except Exception as e:
-        logger.error(f"Error during ranking: {str(e)}")
-        return []
-
-async def analyze_paper(handler: Handler, claim: str, paper: Paper) -> Dict[str, any]:
-    """Analyze a single paper for relevance and extract quotes."""
-    prompt = ANALYSIS_PROMPT.format(
-        claim=claim,
-        full_text=getattr(paper, 'full_text', 'N/A'),
-        title=getattr(paper, 'title', 'N/A'),
-        authors=getattr(paper, 'authors', 'N/A'),
-        year=getattr(paper, 'year', 'N/A'),
-        doi=getattr(paper, 'doi', 'N/A'),
-        abstract=getattr(paper, 'abstract', 'N/A')
-    )
-    
-    try:
-        analysis = await retry_llm_query(handler, prompt, model="gpt_4o_mini")
-        print(f"Paper Analysis: {analysis}")
-        
-        if not isinstance(analysis, dict) or 'analysis' not in analysis or 'relevant_quotes' not in analysis:
-            logger.warning("Incomplete analysis received")
-            raise ValueError("Incomplete analysis received")
-        
-        return analysis
-    except Exception as e:
-        logger.error(f"Error during paper analysis: {str(e)}")
-        return {"analysis": "", "relevant_quotes": []}
-
-async def rank_papers(papers: List[Paper], claim: str, num_rounds: int = 7, top_n: int = 5) -> List[RankedPaper]:
+async def rank_papers(papers: List[Paper], claim: str, top_n: int = 5) -> List[RankedPaper]:
     """Rank papers based on their relevance to the given claim."""
-    handler = Handler()
-    
+    handler = LLMAPIHandler()
     logger.info(f"Starting to rank {len(papers)} papers")
 
-    # Filter out papers with no full text or full text shorter than 200 words
-    valid_papers = [paper for paper in papers if getattr(paper, 'full_text', '') and len(getattr(paper, 'full_text', '').split()) >= 200]
+    # Filter and validate papers
+    valid_papers = [
+        paper for paper in papers 
+        if getattr(paper, 'full_text', '') and 
+        len(getattr(paper, 'full_text', '').split()) >= 200
+    ]
     logger.info(f"After filtering, {len(valid_papers)} valid papers remain")
+
+    # Calculate optimal number of ranking rounds
+    num_rounds = calculate_ranking_rounds(len(valid_papers))
+    logger.info(f"Using {num_rounds} ranking rounds for {len(valid_papers)} papers")
+
+    # Initialize paper scores with paper IDs
+    paper_scores: Dict[str, List[float]] = {f"paper_{i+1}": [] for i in range(len(valid_papers))}
     
-    # Remove duplicates based on DOI or title
-    unique_papers = []
-    seen_dois = set()
-    seen_titles = set()
-    for paper in valid_papers:
-        if getattr(paper, 'doi', None) and paper.doi not in seen_dois:
-            seen_dois.add(paper.doi)
-            unique_papers.append(paper)
-        elif getattr(paper, 'title', None) and paper.title not in seen_titles:
-            seen_titles.add(paper.title)
-            unique_papers.append(paper)
-    
-    # Assign unique IDs to papers if not already present
-    for i, paper in enumerate(unique_papers):
-        if not hasattr(paper, 'id'):
-            setattr(paper, 'id', f"paper_{i}")
-    
-    paper_scores: Dict[str, List[float]] = {paper.id: [] for paper in unique_papers}
-    
+    # Assign IDs to papers for tracking
+    for i, paper in enumerate(valid_papers):
+        setattr(paper, 'id', f"paper_{i+1}")
+
+    # Conduct ranking rounds
     for round in range(num_rounds):
         logger.info(f"Starting ranking round {round + 1} of {num_rounds}")
-        shuffled_papers = random.sample(unique_papers, len(unique_papers))
+        shuffled_papers = random.sample(valid_papers, len(valid_papers))
         
-        # Create balanced groups
-        paper_groups = create_balanced_groups(shuffled_papers)
-        
-        # Rank each group
-        ranking_tasks = [rank_group(handler, claim, group) for group in paper_groups]
-        group_rankings = await asyncio.gather(*ranking_tasks)
-        
-        # Accumulate scores
-        for rankings in group_rankings:
-            group_size = len(rankings)
-            for ranking in rankings:
-                paper_id = ranking['paper_id']
-                rank = ranking['rank']
-                # Normalize score based on group size
-                score = (group_size - rank + 1) / group_size
-                paper_scores[paper_id].append(score)
-    
-    # Calculate average scores, handling potential division by zero
+        # Create paper groups for ranking
+        paper_groups = create_balanced_groups([{
+            "id": paper.id,
+            "full_text": getattr(paper, 'full_text', '')[:500],
+            "title": getattr(paper, 'title', ''),
+            "abstract": getattr(paper, 'abstract', '')
+        } for paper in shuffled_papers])
+
+        # Generate ranking prompts
+        prompts = []
+        for group in paper_groups:
+            paper_summaries = "\n".join([
+                f"Paper ID: {paper['id']}\n"
+                f"Title: {paper['title'][:100]}\n"
+                f"Abstract: {paper['abstract'][:200]}...\n"
+                f"Full Text Excerpt: {paper['full_text'][:300]}..."
+                for paper in group
+            ])
+            
+            prompt = f"""
+Analyze these papers' relevance to the claim: "{claim}"
+
+Papers to analyze:
+{paper_summaries}
+
+Rank these papers from most to least relevant based on:
+1. Direct relevance to the claim
+2. Quality of evidence
+3. Methodology strength
+4. Overall impact
+
+Your response must be a valid RankingResponse with exactly {len(group)} rankings.
+Each paper must be ranked uniquely from 1 to {len(group)}, where 1 is most relevant.
+Use the exact paper_id as given.
+
+Format:
+{{
+    "rankings": [
+        {{
+            "paper_id": "string (exact paper_id as given)",
+            "rank": "integer (1 to {len(group)})",
+            "explanation": "string (detailed explanation)"
+        }}
+    ]
+}}
+"""
+            prompts.append(prompt)
+
+        # Process rankings
+        logger.info("Sending ranking prompts to LLM")
+        batch_responses = await handler.process(
+            prompts=prompts,
+            model="gpt-4o-mini",
+            mode="async_batch",
+            response_format=RankingResponse
+        )
+
+        # Process ranking responses
+        for response in batch_responses:
+            if not response:
+                continue
+                
+            try:
+                rankings = None
+                # Extract rankings from response
+                if isinstance(response, RankingResponse):
+                    rankings = response.rankings
+                elif isinstance(response, dict):
+                    if 'rankings' in response:
+                        rankings = response['rankings']
+                    elif 'response' in response and isinstance(response['response'], RankingResponse):
+                        rankings = response['response'].rankings
+
+                if not rankings:
+                    logger.error(f"Invalid rankings format: {response}")
+                    continue
+
+                # Process rankings
+                group_size = len(rankings)
+                for ranking in rankings:
+                    paper_id = ranking.paper_id
+                    if paper_id in paper_scores:
+                        score = (group_size - ranking.rank + 1) / group_size
+                        paper_scores[paper_id].append(score)
+                        logger.debug(f"Added score {score} for paper {paper_id}")
+                    else:
+                        logger.warning(f"Unknown paper_id in ranking: {paper_id}")
+
+            except Exception as e:
+                logger.error(f"Error processing ranking response: {str(e)}", exc_info=True)
+
+    # Calculate average scores
     average_scores = {}
     for paper_id, scores in paper_scores.items():
         if scores:
             average_scores[paper_id] = sum(scores) / len(scores)
+            logger.info(f"Paper {paper_id} average score: {average_scores[paper_id]:.2f}")
         else:
             logger.warning(f"No scores recorded for paper {paper_id}. Assigning lowest score.")
-            average_scores[paper_id] = 0
-    
-    # Sort papers by average score
-    sorted_papers = sorted(unique_papers, key=lambda p: average_scores[p.id], reverse=True)
-    
-    print("\nScores of all papers:")
-    for paper in sorted_papers:
-        print(f"Paper ID: {paper.id}, Title: {paper.title}, Average Score: {average_scores[paper.id]:.2f}")
+            average_scores[paper_id] = 0.0
 
-    
-    # Analyze top N papers
-    top_papers = sorted_papers[:top_n]
-    analysis_tasks = [analyze_paper(handler, claim, paper) for paper in top_papers]
-    paper_analyses = await asyncio.gather(*analysis_tasks)
-    
-    # Create RankedPaper objects
+    print("\nScores of all papers:")
+    for paper in valid_papers:
+        print(f"Paper ID: {paper.id}, Title: {paper.title[:100]}..., Average Score: {average_scores.get(paper.id, 0.00):.2f}")
+
+    # Select top papers for detailed analysis
+    top_papers = sorted(
+        valid_papers,
+        key=lambda p: average_scores.get(p.id, 0),
+        reverse=True
+    )[:top_n]
+
+    # Generate analysis prompts for top papers
+    analysis_prompts = []
+    logger.info(f"Sending {len(top_papers)} analysis prompts to LLM")
+    for paper in top_papers:
+        prompt = f"""
+Analyze this paper's relevance to the claim: "{claim}"
+
+Paper details:
+Title: {paper.title}
+Full Text: {getattr(paper, 'full_text', '')[:1000]}...
+
+Provide a super detailed technical analysis focusing on:
+1. Direct relevance to the claim
+2. Methodology and evidence quality
+3. Significance of findings
+4. Limitations and potential biases
+
+Your response must be a valid AnalysisResponse object with:
+1. A comprehensive technical analysis (minimum 500 words)
+2. Three relevant quotes from the paper (100+ words each)
+
+Format:
+{{
+    "analysis": "Detailed technical analysis here",
+    "relevant_quotes": [
+        "First detailed quote from paper",
+        "Second detailed quote from paper",
+        "Third detailed quote from paper"
+    ]
+}}"""
+        analysis_prompts.append(prompt)
+
+    # Process analysis prompts
+    analysis_responses = await handler.process(
+        prompts=analysis_prompts,
+        model="gpt-4o-mini",
+        mode="async_batch",
+        response_format=AnalysisResponse
+    )
+
+    # Create ranked papers from analysis
     ranked_papers = []
-    for paper, analysis in zip(top_papers, paper_analyses):
-        paper_dict = paper.__dict__.copy()
-        paper_dict.pop('id', None)  # Remove 'id' from the dictionary
-        ranked_paper = RankedPaper(
-            **paper_dict,
-            relevance_score=average_scores[paper.id],
-            analysis=analysis['analysis'],
-            relevant_quotes=analysis['relevant_quotes']
-        )
-        # Generate BibTeX
-        bibtex = get_bibtex_from_doi(ranked_paper.doi) if ranked_paper.doi else None
-        if not bibtex:
-            bibtex = get_bibtex_from_title(ranked_paper.title, ranked_paper.authors, ranked_paper.year)
-        ranked_paper.bibtex = bibtex or ""
-        ranked_papers.append(ranked_paper)
-    
-    logger.info(f"Completed paper ranking. Top score: {ranked_papers[0].relevance_score:.2f}, Bottom score: {ranked_papers[-1].relevance_score:.2f}")
+    for paper, response in zip(top_papers, analysis_responses):
+        try:
+            # Extract analysis response
+            analysis_obj = None
+            if isinstance(response, AnalysisResponse):
+                analysis_obj = response
+            elif isinstance(response, dict):
+                if 'response' in response and isinstance(response['response'], AnalysisResponse):
+                    analysis_obj = response['response']
+                elif 'analysis' in response and 'relevant_quotes' in response:
+                    analysis_obj = AnalysisResponse(**response)
+
+            if not analysis_obj:
+                logger.error(f"Could not extract analysis from response: {response}")
+                continue
+
+            # Get BibTeX and create ranked paper, with fallback to existing bibtex
+            generated_bibtex = ""
+            if paper.doi:
+                generated_bibtex = get_bibtex_from_doi(paper.doi) or ""
+            if not generated_bibtex and paper.title:
+                generated_bibtex = get_bibtex_from_title(
+                    paper.title,
+                    paper.authors,
+                    paper.year
+                ) or ""
+
+            # Copy the paper dict and prepare it for ranked paper creation
+            paper_dict = paper.__dict__.copy()
+            paper_dict.pop('id', None)  # Remove ID as it's not needed in final ranked paper
+            
+            # Use generated bibtex if we got one, otherwise keep existing
+            final_bibtex = generated_bibtex if generated_bibtex else paper_dict.get('bibtex', '')
+            paper_dict['bibtex'] = final_bibtex
+
+            # Create ranked paper
+            ranked_paper = RankedPaper(
+                **paper_dict,
+                relevance_score=average_scores.get(paper.id, 0.0),
+                analysis=analysis_obj.analysis,
+                relevant_quotes=analysis_obj.relevant_quotes
+            )
+            
+            ranked_papers.append(ranked_paper)
+            logger.info(f"Successfully created ranked paper for: {paper.title[:100]}")
+
+        except Exception as e:
+            logger.error(f"Error processing analysis for paper {paper.title[:100]}...: {str(e)}", exc_info=True)
+            logger.debug(f"Paper fields: {list(paper_dict.keys())}")  # Just log what fields exist, not their contents
+            logger.debug(f"Analysis status: {'Success' if analysis_obj else 'Failed'}")
+            logger.debug(f"BibTeX status: {'Generated' if generated_bibtex else 'Missing'}")
+
+    if not ranked_papers:
+        logger.error("No papers were successfully ranked and analyzed")
+    else:
+        logger.info(f"Successfully ranked and analyzed {len(ranked_papers)} papers")
+
     return ranked_papers
+
+def test_ranking():
+    """Test the paper ranking functionality."""
+    async def run_test():
+        # Create test papers with varying sizes to test scaling
+        test_sets = [
+            [Paper(
+                title=f"Test Paper {i}",
+                authors=["Author A", "Author B"],
+                year=2024,
+                doi=f"10.1234/test.{i}",
+                abstract="Test abstract",
+                full_text="Test full text " * 100,
+                source="Test Source"
+            ) for i in range(1, size + 1)]
+            for size in [3, 5, 10, 20]
+        ]
+
+        for papers in test_sets:
+            logger.info(f"\nTesting with {len(papers)} papers")
+            ranked_papers = await rank_papers(
+                papers=papers,
+                claim="Test claim for ranking papers",
+                top_n=min(3, len(papers))
+            )
+
+            # Verify results
+            assert len(ranked_papers) > 0, "No papers were ranked"
+            for paper in ranked_papers:
+                assert isinstance(paper, RankedPaper), "Invalid paper type"
+                assert paper.relevance_score is not None, "Missing relevance score"
+                assert paper.analysis, "Missing analysis"
+                assert len(paper.relevant_quotes) > 0, "Missing relevant quotes"
+                assert isinstance(paper.bibtex, str), "Missing or invalid bibtex"
+
+        logger.info("All ranking tests completed successfully")
+
+    import asyncio
+    return asyncio.run(run_test())
+
+if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO)
+    test_ranking()

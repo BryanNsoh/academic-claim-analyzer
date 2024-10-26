@@ -1,8 +1,8 @@
-# src/academic_claim_analyzer/query_formulator.py
+# academic_claim_analyzer/query_formulator.py
 
 from typing import List
-import json
-from async_llm_handler import Handler
+from pydantic import BaseModel, Field
+from .llm_api_handler import LLMAPIHandler
 
 SCOPUS_SEARCH_GUIDE = """
 Syntax and Operators
@@ -136,21 +136,12 @@ Generate the list of search queries now, following the instructions above.
 """
 
 
+class QueryResponse(BaseModel):
+    queries: List[str] = Field(description="List of generated search queries")
 
 
 async def formulate_queries(claim: str, num_queries: int, query_type: str) -> List[str]:
-    """
-    Generate search queries based on the given claim.
-
-    Args:
-        claim (str): The claim to generate queries for.
-        num_queries (int): The number of queries to generate.
-        query_type (str): The type of query to generate ('scopus' or 'openalex').
-
-    Returns:
-        List[str]: A list of generated search queries.
-    """
-    handler = Handler()
+    handler = LLMAPIHandler()
 
     if query_type.lower() == 'scopus':
         search_guidance = SCOPUS_SEARCH_GUIDE
@@ -166,22 +157,11 @@ async def formulate_queries(claim: str, num_queries: int, query_type: str) -> Li
         QUERY_TYPE=query_type
     )
 
-    response = await handler.query(prompt, model="gpt_4o_mini", json_mode=True)
+    response = await handler.process(
+        prompts=prompt,  # Single prompt, not list
+        model="gpt-4o-mini",
+        mode="regular",  # Changed from async_batch
+        response_format=QueryResponse
+    )
     
-    if isinstance(response, str):
-        try:
-            parsed_response = json.loads(response)
-        except json.JSONDecodeError:
-            raise ValueError("Failed to parse LLM response as JSON")
-    elif isinstance(response, dict):
-        parsed_response = response
-    else:
-        raise ValueError("Unexpected response format from LLM")
-
-    if "queries" not in parsed_response or not isinstance(parsed_response["queries"], list):
-        raise ValueError("Invalid response format: 'queries' list not found")
-
-    queries = parsed_response["queries"]
-    print(queries)  
-
-    return queries
+    return response.queries  # Direct access to queries

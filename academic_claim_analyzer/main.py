@@ -7,6 +7,7 @@ from .query_formulator import formulate_queries
 from .paper_ranker import rank_papers
 from .search import OpenAlexSearch, ScopusSearch, CORESearch, BaseSearch
 from .models import ClaimAnalysis, Paper
+from .debug_utils import debug_decorator  # Import the debug decorator
 
 logger = logging.getLogger(__name__)
 
@@ -39,6 +40,7 @@ async def _perform_analysis(analysis: ClaimAnalysis) -> None:
     await _rank_papers(analysis)
 
 async def _formulate_queries(analysis: ClaimAnalysis) -> None:
+    # Changed to use regular mode instead of async_batch
     openalex_queries = await formulate_queries(analysis.claim, analysis.parameters["num_queries"], "openalex")
     scopus_queries = await formulate_queries(analysis.claim, analysis.parameters["num_queries"], "scopus")
     
@@ -92,7 +94,6 @@ async def main():
     print(f"Number of queries generated: {len(analysis_result.queries)}")
     print(f"Total papers found: {len(analysis_result.search_results)}")
     
-    # Add this section to print a summary of all search results
     print("\nSearch Results Summary:")
     for i, paper in enumerate(analysis_result.search_results, 1):
         print(f"\n{i}. Title: {paper.title}")

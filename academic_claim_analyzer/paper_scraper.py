@@ -23,7 +23,6 @@ class UnifiedWebScraper:
         try:
             playwright = await async_playwright().start()
             self.browser = await playwright.chromium.launch(headless=True)
-            self.logger.info("Browser initialized successfully")
         except Exception as e:
             self.logger.error(f"Failed to initialize browser: {str(e)}")
             raise
@@ -31,7 +30,6 @@ class UnifiedWebScraper:
     async def close(self):
         if self.browser:
             await self.browser.close()
-            self.logger.info("Browser closed")
 
     def normalize_url(self, url):
         if url.startswith("10.") or url.startswith("doi:"):
@@ -43,43 +41,32 @@ class UnifiedWebScraper:
 
     async def scrape(self, url, min_words=700, max_retries=3):
         normalized_url = self.normalize_url(url)
-        self.logger.info(f"Attempting to scrape URL: {normalized_url}")
 
         scraping_methods = [
             self.scrape_with_requests,
             self.scrape_with_playwright
         ]
 
-        # Only add PDF scraping method if the URL ends with .pdf
         if normalized_url.lower().endswith('.pdf'):
             scraping_methods.append(self.scrape_pdf)
 
         best_result = ("", 0)
         for method in scraping_methods:
-            self.logger.info(f"Trying method: {method.__name__}")
             for attempt in range(max_retries):
                 try:
-                    self.logger.info(f"Attempt {attempt + 1} with {method.__name__}")
                     content = await method(normalized_url)
                     word_count = len(content.split())
-                    self.logger.info(f"Got {word_count} words from {method.__name__}")
                     if word_count > best_result[1]:
                         best_result = (content, word_count)
                     if word_count >= min_words:
-                        self.logger.info(f"Successfully scraped URL: {normalized_url}")
                         return content
                 except Exception as e:
-                    self.logger.error(f"Error in {method.__name__} (attempt {attempt + 1}): {str(e)}")
-                if attempt < max_retries - 1:
-                    wait_time = random.uniform(1, 3)
-                    self.logger.info(f"Waiting {wait_time:.2f} seconds before next attempt")
-                    await asyncio.sleep(wait_time)
+                    if attempt < max_retries - 1:
+                        await asyncio.sleep(random.uniform(1, 3))
 
-        self.logger.warning(f"Failed to meet minimum word count for URL: {normalized_url}")
         return best_result[0]
 
     async def scrape_with_requests(self, url):
-        self.logger.info(f"Scraping with requests: {url}")
         response = requests.get(url, headers={"User-Agent": self.user_agent.random})
         if response.status_code == 200:
             soup = BeautifulSoup(response.content, "html.parser")
@@ -91,7 +78,6 @@ class UnifiedWebScraper:
         return ""
 
     async def scrape_with_playwright(self, url):
-        self.logger.info(f"Scraping with Playwright: {url}")
         if not self.browser:
             await self.initialize()
         context = await self.browser.new_context(
@@ -101,17 +87,15 @@ class UnifiedWebScraper:
         )
         page = await context.new_page()
         try:
-            await page.goto(url, wait_until="networkidle", timeout=15000)  # Increased timeout to 90 seconds
+            await page.goto(url, wait_until="networkidle", timeout=15000)
             content = await self.extract_text_content(page)
             return content
         except PlaywrightTimeoutError:
-            self.logger.warning(f"Timeout occurred while loading {url}")
             return ""
         finally:
             await page.close()
 
     async def scrape_pdf(self, url):
-        self.logger.info(f"Scraping PDF: {url}")
         async with self.session.get(url) as response:
             if response.status == 200:
                 pdf_bytes = await response.read()
@@ -128,8 +112,7 @@ class UnifiedWebScraper:
                 }
             """)
             return text_content.strip()
-        except Exception as e:
-            self.logger.error(f"Failed to extract text content. Error: {str(e)}")
+        except Exception:
             return ""
 
     def extract_text_from_pdf(self, pdf_bytes):
@@ -139,15 +122,13 @@ class UnifiedWebScraper:
             for page in document:
                 text += page.get_text()
             return text.strip()
-        except Exception as e:
-            self.logger.error(f"Failed to extract text from PDF. Error: {str(e)}")
+        except Exception:
             return ""
 
 async def main():
-    log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     logging.basicConfig(
         level=logging.INFO,
-        format=log_format,
+        format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
         handlers=[
             logging.FileHandler("scraper.log"),
             logging.StreamHandler(sys.stdout),

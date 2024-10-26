@@ -5,3 +5,4 @@ from .openalex_search import OpenAlexSearch
 from .scopus_search import ScopusSearch
 from .core_search import CORESearch
 from .base import BaseSearch
+

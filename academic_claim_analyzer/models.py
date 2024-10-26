@@ -1,14 +1,14 @@
 # academic_claim_analyzer/models.py
 
 from pydantic import BaseModel, Field
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Type
 from datetime import datetime
 
 class SearchQuery(BaseModel):
     query: str
     source: str
     timestamp: datetime = Field(default_factory=datetime.utcnow)
-    
+        
     class Config:
         json_encoders = {
             datetime: lambda v: v.isoformat()
@@ -17,13 +17,13 @@ class SearchQuery(BaseModel):
 class Paper(BaseModel):
     title: str
     authors: List[str]
-    year: int
+    year: Optional[int] = None
     doi: str
     abstract: Optional[str] = None
     source: str = ""
     full_text: Optional[str] = None
     pdf_link: Optional[str] = None
-    bibtex: Optional[str] = None
+    bibtex: str = ""  # Change to non-optional with empty string default
     metadata: Dict[str, Any] = Field(default_factory=dict)
     id: Optional[str] = None
 
@@ -31,8 +31,9 @@ class RankedPaper(Paper):
     relevance_score: Optional[float] = None
     relevant_quotes: List[str] = Field(default_factory=list)
     analysis: str = ""
-    bibtex: str = ""
-        
+    exclusion_criteria_result: Optional[Dict[str, Any]] = Field(default_factory=dict)
+    extraction_result: Optional[Dict[str, Any]] = Field(default_factory=dict)
+
 class ClaimAnalysis(BaseModel):
     claim: str
     timestamp: datetime = Field(default_factory=datetime.utcnow)
@@ -41,6 +42,8 @@ class ClaimAnalysis(BaseModel):
     search_results: List[Paper] = Field(default_factory=list)
     ranked_papers: List[RankedPaper] = Field(default_factory=list)
     metadata: Dict[str, Any] = Field(default_factory=dict)
+    exclusion_schema: Optional[Type[BaseModel]] = None          # New field for exclusion schema
+    extraction_schema: Optional[Type[BaseModel]] = None         # New field for extraction schema
 
     class Config:
         json_encoders = {

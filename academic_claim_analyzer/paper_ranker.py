@@ -5,7 +5,7 @@ import random
 import logging
 import math
 from typing import List, Dict, Any, Optional, Type
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, create_model
 from .models import Paper, RankedPaper
 from .llm_api_handler import LLMAPIHandler
 from .search.bibtex import get_bibtex_from_doi, get_bibtex_from_title
@@ -27,26 +27,51 @@ class AnalysisResponse(BaseModel):
     analysis: str = Field(description="Detailed analysis of the paper's relevance")
     relevant_quotes: List[str] = Field(description="List of relevant quotes from the paper")
 
+def create_combined_schema(exclusion_schema: Optional[Type[BaseModel]], 
+                         extraction_schema: Optional[Type[BaseModel]]) -> Type[BaseModel]:
+    """Create a combined schema from exclusion and extraction schemas."""
+    fields = {}
+    annotations = {}
+
+    # Add fields from exclusion schema
+    if exclusion_schema:
+        for field_name, field in exclusion_schema.model_fields.items():
+            annotations[field_name] = field.annotation
+            fields[field_name] = field
+
+    # Add fields from extraction schema
+    if extraction_schema:
+        for field_name, field in extraction_schema.model_fields.items():
+            annotations[field_name] = field.annotation
+            fields[field_name] = field
+
+    # Create combined model
+    namespace = {
+        '__annotations__': annotations,
+        **{name: field for name, field in fields.items()},
+        'model_config': {
+            'json_schema_extra': {
+                'type': 'object',
+                'required': list(annotations.keys()),
+                'additionalProperties': False,
+                'properties': {
+                    name: {
+                        'type': 'boolean' if field.annotation == bool else 'string',
+                        'description': field.description
+                    } for name, field in fields.items()
+                }
+            }
+        }
+    }
+
+    return create_model('CombinedSchema', **namespace)
+
 def calculate_ranking_rounds(num_papers: int) -> int:
-    """
-    Calculate optimal number of ranking rounds based on paper count.
-    
-    Strategy:
-    - Minimum 3 rounds for <5 papers to ensure stability
-    - Logarithmic scaling up to 10 rounds maximum
-    - More rounds for more papers, but with diminishing returns
-    """
+    """Calculate optimal number of ranking rounds based on paper count."""
     if num_papers < 5:
         return 3
-    
-    # Logarithmic scaling: log2(n) * 2 + 3
-    # This gives us:
-    # 5 papers = 7 rounds
-    # 10 papers = 8 rounds
-    # 20 papers = 9 rounds
-    # 40+ papers = 10 rounds
     rounds = min(10, math.floor(math.log2(num_papers) * 2) + 3)
-    return max(3, rounds)  # Ensure at least 3 rounds
+    return max(3, rounds)
 
 def create_balanced_groups(papers: List[Dict[str, Any]], min_group_size: int = 2, max_group_size: int = 5) -> List[List[Dict[str, Any]]]:
     """Create balanced groups of papers for ranking."""
@@ -60,21 +85,15 @@ def create_balanced_groups(papers: List[Dict[str, Any]], min_group_size: int = 2
 
     try:
         if num_papers < max_group_size:
-            logger.info(f"Number of papers ({num_papers}) less than max_group_size ({max_group_size}). Using num_papers as group size.")
             group_size = num_papers
         else:
-            # Calculate optimal group size
             inner_division = num_papers // max_group_size
             logger.info(f"Inner division result: {inner_division}")
-            if inner_division == 0:
-                group_size = max_group_size
-            else:
-                group_size = min(max_group_size, max(min_group_size, num_papers // inner_division))
+            group_size = min(max_group_size, max(min_group_size, num_papers // inner_division))
         
         logger.info(f"Calculated group size: {group_size}")
         groups = [papers[i:i + group_size] for i in range(0, num_papers, group_size)]
         
-        # Handle last group if too small
         if len(groups[-1]) < min_group_size and len(groups) > 1:
             last_group = groups.pop()
             for i, paper in enumerate(last_group):
@@ -87,12 +106,18 @@ def create_balanced_groups(papers: List[Dict[str, Any]], min_group_size: int = 2
         logger.error(f"Error in create_balanced_groups: {str(e)}", exc_info=True)
         return [papers]
 
-async def rank_papers(papers: List[Paper], claim: str, top_n: int = 5) -> List[RankedPaper]:
+async def rank_papers(papers: List[Paper], claim: str, exclusion_schema: Optional[Type[BaseModel]] = None,
+                     extraction_schema: Optional[Type[BaseModel]] = None, top_n: int = 5) -> List[RankedPaper]:
     """Rank papers based on their relevance to the given claim."""
     handler = LLMAPIHandler()
     logger.info(f"Starting to rank {len(papers)} papers")
 
-    # Filter and validate papers
+    # Create combined schema for evaluation if needed
+    combined_schema = None
+    if exclusion_schema or extraction_schema:
+        combined_schema = create_combined_schema(exclusion_schema, extraction_schema)
+        logger.info("Created combined schema for paper evaluation")
+
     valid_papers = [
         paper for paper in papers 
         if getattr(paper, 'full_text', '') and 
@@ -100,23 +125,76 @@ async def rank_papers(papers: List[Paper], claim: str, top_n: int = 5) -> List[R
     ]
     logger.info(f"After filtering, {len(valid_papers)} valid papers remain")
 
-    # Calculate optimal number of ranking rounds
     num_rounds = calculate_ranking_rounds(len(valid_papers))
     logger.info(f"Using {num_rounds} ranking rounds for {len(valid_papers)} papers")
 
-    # Initialize paper scores with paper IDs
     paper_scores: Dict[str, List[float]] = {f"paper_{i+1}": [] for i in range(len(valid_papers))}
     
-    # Assign IDs to papers for tracking
     for i, paper in enumerate(valid_papers):
         setattr(paper, 'id', f"paper_{i+1}")
 
-    # Conduct ranking rounds
+    # Conduct ranking rounds and calculate scores
+    average_scores = await _conduct_ranking_rounds(valid_papers, claim, num_rounds, paper_scores, handler)
+
+    print("\nScores of all papers:")
+    for paper in valid_papers:
+        print(f"Paper ID: {paper.id}, Title: {paper.title[:100]}..., Average Score: {average_scores.get(paper.id, 0.00):.2f}")
+
+    # Select top papers for analysis
+    top_papers = sorted(
+        valid_papers,
+        key=lambda p: average_scores.get(p.id, 0),
+        reverse=True
+    )[:top_n]
+
+    # Process detailed analysis and evaluations
+    ranked_papers = []
+    for paper in top_papers:
+        try:
+            # Get paper analysis
+            analysis_obj = await _get_paper_analysis(paper, claim, handler)
+            if not analysis_obj:
+                continue
+
+            # Get evaluation results if schemas exist
+            evaluation_results = await _evaluate_paper(paper, combined_schema, handler) if combined_schema else {}
+
+            # Get or generate BibTeX
+            generated_bibtex = await _get_bibtex(paper)
+
+            # Create clean paper dict and update with new values
+            paper_dict = paper.model_dump()
+            paper_dict.update({
+                'bibtex': generated_bibtex or paper_dict.get('bibtex', ''),
+                'relevance_score': average_scores.get(paper.id, 0.0),
+                'analysis': analysis_obj.analysis,
+                'relevant_quotes': analysis_obj.relevant_quotes,
+                'exclusion_criteria_result': evaluation_results.get('exclusion_criteria_result', {}),
+                'extraction_result': evaluation_results.get('extraction_result', {})
+            })
+
+            # Create ranked paper with clean data
+            ranked_paper = RankedPaper(**paper_dict)
+            ranked_papers.append(ranked_paper)
+            logger.info(f"Successfully created ranked paper for: {paper.title[:100]}")
+
+        except Exception as e:
+            logger.error(f"Error processing paper {paper.title[:100]}...: {str(e)}", exc_info=True)
+
+    if not ranked_papers:
+        logger.error("No papers were successfully ranked and analyzed")
+    else:
+        logger.info(f"Successfully ranked and analyzed {len(ranked_papers)} papers")
+
+    return ranked_papers
+
+async def _conduct_ranking_rounds(valid_papers: List[Paper], claim: str, num_rounds: int, 
+                                paper_scores: Dict[str, List[float]], handler: LLMAPIHandler) -> Dict[str, float]:
+    """Conduct ranking rounds and return average scores."""
     for round in range(num_rounds):
         logger.info(f"Starting ranking round {round + 1} of {num_rounds}")
         shuffled_papers = random.sample(valid_papers, len(valid_papers))
         
-        # Create paper groups for ranking
         paper_groups = create_balanced_groups([{
             "id": paper.id,
             "full_text": getattr(paper, 'full_text', '')[:500],
@@ -124,18 +202,41 @@ async def rank_papers(papers: List[Paper], claim: str, top_n: int = 5) -> List[R
             "abstract": getattr(paper, 'abstract', '')
         } for paper in shuffled_papers])
 
-        # Generate ranking prompts
-        prompts = []
-        for group in paper_groups:
-            paper_summaries = "\n".join([
-                f"Paper ID: {paper['id']}\n"
-                f"Title: {paper['title'][:100]}\n"
-                f"Abstract: {paper['abstract'][:200]}...\n"
-                f"Full Text Excerpt: {paper['full_text'][:300]}..."
-                for paper in group
-            ])
-            
-            prompt = f"""
+        prompts = [_create_ranking_prompt(group, claim) for group in paper_groups]
+        
+        logger.info("Sending ranking prompts to LLM")
+        batch_responses = await handler.process(
+            prompts=prompts,
+            model="gpt-4o-mini",
+            mode="async_batch",
+            response_format=RankingResponse
+        )
+
+        await _process_ranking_responses(batch_responses, paper_scores)
+
+    # Calculate average scores
+    average_scores = {}
+    for paper_id, scores in paper_scores.items():
+        if scores:
+            average_scores[paper_id] = sum(scores) / len(scores)
+            logger.info(f"Paper {paper_id} average score: {average_scores[paper_id]:.2f}")
+        else:
+            logger.warning(f"No scores recorded for paper {paper_id}. Assigning lowest score.")
+            average_scores[paper_id] = 0.0
+
+    return average_scores
+
+def _create_ranking_prompt(group: List[Dict[str, Any]], claim: str) -> str:
+    """Create a ranking prompt for a group of papers."""
+    paper_summaries = "\n".join([
+        f"Paper ID: {paper['id']}\n"
+        f"Title: {paper['title'][:100]}\n"
+        f"Abstract: {paper['abstract'][:200]}...\n"
+        f"Full Text Excerpt: {paper['full_text'][:300]}..."
+        for paper in group
+    ])
+    
+    return f"""
 Analyze these papers' relevance to the claim: "{claim}"
 
 Papers to analyze:
@@ -162,77 +263,43 @@ Format:
     ]
 }}
 """
-            prompts.append(prompt)
 
-        # Process rankings
-        logger.info("Sending ranking prompts to LLM")
-        batch_responses = await handler.process(
-            prompts=prompts,
-            model="gpt-4o-mini",
-            mode="async_batch",
-            response_format=RankingResponse
-        )
+async def _process_ranking_responses(batch_responses: List[Any], paper_scores: Dict[str, List[float]]):
+    """Process ranking responses and update paper scores."""
+    for response in batch_responses:
+        if not response:
+            continue
+            
+        try:
+            rankings = None
+            if isinstance(response, RankingResponse):
+                rankings = response.rankings
+            elif isinstance(response, dict):
+                if 'rankings' in response:
+                    rankings = response['rankings']
+                elif 'response' in response and isinstance(response['response'], RankingResponse):
+                    rankings = response['response'].rankings
 
-        # Process ranking responses
-        for response in batch_responses:
-            if not response:
+            if not rankings:
+                logger.error(f"Invalid rankings format: {response}")
                 continue
-                
-            try:
-                rankings = None
-                # Extract rankings from response
-                if isinstance(response, RankingResponse):
-                    rankings = response.rankings
-                elif isinstance(response, dict):
-                    if 'rankings' in response:
-                        rankings = response['rankings']
-                    elif 'response' in response and isinstance(response['response'], RankingResponse):
-                        rankings = response['response'].rankings
 
-                if not rankings:
-                    logger.error(f"Invalid rankings format: {response}")
-                    continue
+            group_size = len(rankings)
+            for ranking in rankings:
+                paper_id = ranking.paper_id
+                if paper_id in paper_scores:
+                    score = (group_size - ranking.rank + 1) / group_size
+                    paper_scores[paper_id].append(score)
+                    logger.debug(f"Added score {score} for paper {paper_id}")
+                else:
+                    logger.warning(f"Unknown paper_id in ranking: {paper_id}")
 
-                # Process rankings
-                group_size = len(rankings)
-                for ranking in rankings:
-                    paper_id = ranking.paper_id
-                    if paper_id in paper_scores:
-                        score = (group_size - ranking.rank + 1) / group_size
-                        paper_scores[paper_id].append(score)
-                        logger.debug(f"Added score {score} for paper {paper_id}")
-                    else:
-                        logger.warning(f"Unknown paper_id in ranking: {paper_id}")
+        except Exception as e:
+            logger.error(f"Error processing ranking response: {str(e)}", exc_info=True)
 
-            except Exception as e:
-                logger.error(f"Error processing ranking response: {str(e)}", exc_info=True)
-
-    # Calculate average scores
-    average_scores = {}
-    for paper_id, scores in paper_scores.items():
-        if scores:
-            average_scores[paper_id] = sum(scores) / len(scores)
-            logger.info(f"Paper {paper_id} average score: {average_scores[paper_id]:.2f}")
-        else:
-            logger.warning(f"No scores recorded for paper {paper_id}. Assigning lowest score.")
-            average_scores[paper_id] = 0.0
-
-    print("\nScores of all papers:")
-    for paper in valid_papers:
-        print(f"Paper ID: {paper.id}, Title: {paper.title[:100]}..., Average Score: {average_scores.get(paper.id, 0.00):.2f}")
-
-    # Select top papers for detailed analysis
-    top_papers = sorted(
-        valid_papers,
-        key=lambda p: average_scores.get(p.id, 0),
-        reverse=True
-    )[:top_n]
-
-    # Generate analysis prompts for top papers
-    analysis_prompts = []
-    logger.info(f"Sending {len(top_papers)} analysis prompts to LLM")
-    for paper in top_papers:
-        prompt = f"""
+async def _get_paper_analysis(paper: Paper, claim: str, handler: LLMAPIHandler) -> Optional[AnalysisResponse]:
+    """Get detailed analysis for a paper."""
+    prompt = f"""
 Analyze this paper's relevance to the claim: "{claim}"
 
 Paper details:
@@ -258,76 +325,75 @@ Format:
         "Third detailed quote from paper"
     ]
 }}"""
-        analysis_prompts.append(prompt)
 
-    # Process analysis prompts
-    analysis_responses = await handler.process(
-        prompts=analysis_prompts,
+    response = await handler.process(
+        prompts=prompt,
         model="gpt-4o-mini",
-        mode="async_batch",
+        mode="regular",
         response_format=AnalysisResponse
     )
 
-    # Create ranked papers from analysis
-    ranked_papers = []
-    for paper, response in zip(top_papers, analysis_responses):
-        try:
-            # Extract analysis response
-            analysis_obj = None
-            if isinstance(response, AnalysisResponse):
-                analysis_obj = response
-            elif isinstance(response, dict):
-                if 'response' in response and isinstance(response['response'], AnalysisResponse):
-                    analysis_obj = response['response']
-                elif 'analysis' in response and 'relevant_quotes' in response:
-                    analysis_obj = AnalysisResponse(**response)
+    if isinstance(response, AnalysisResponse):
+        return response
+    elif isinstance(response, dict):
+        if 'response' in response and isinstance(response['response'], AnalysisResponse):
+            return response['response']
+        elif 'analysis' in response and 'relevant_quotes' in response:
+            return AnalysisResponse(**response)
+    return None
 
-            if not analysis_obj:
-                logger.error(f"Could not extract analysis from response: {response}")
-                continue
+async def _evaluate_paper(paper: Paper, combined_schema: Type[BaseModel], 
+                         handler: LLMAPIHandler) -> Dict[str, Dict[str, Any]]:
+    """Evaluate paper against provided schemas."""
+    if not combined_schema:
+        return {}
 
-            # Get BibTeX and create ranked paper, with fallback to existing bibtex
-            generated_bibtex = ""
-            if paper.doi:
-                generated_bibtex = get_bibtex_from_doi(paper.doi) or ""
-            if not generated_bibtex and paper.title:
-                generated_bibtex = get_bibtex_from_title(
-                    paper.title,
-                    paper.authors,
-                    paper.year
-                ) or ""
+    prompt = f"""
+Evaluate this paper against the provided criteria:
 
-            # Copy the paper dict and prepare it for ranked paper creation
-            paper_dict = paper.__dict__.copy()
-            paper_dict.pop('id', None)  # Remove ID as it's not needed in final ranked paper
-            
-            # Use generated bibtex if we got one, otherwise keep existing
-            final_bibtex = generated_bibtex if generated_bibtex else paper_dict.get('bibtex', '')
-            paper_dict['bibtex'] = final_bibtex
+Title: {paper.title}
+Abstract: {paper.abstract or ''}
+Full Text: {paper.full_text[:1000] if paper.full_text else ''}...
 
-            # Create ranked paper
-            ranked_paper = RankedPaper(
-                **paper_dict,
-                relevance_score=average_scores.get(paper.id, 0.0),
-                analysis=analysis_obj.analysis,
-                relevant_quotes=analysis_obj.relevant_quotes
-            )
-            
-            ranked_papers.append(ranked_paper)
-            logger.info(f"Successfully created ranked paper for: {paper.title[:100]}")
+Provide evaluation results according to the schema.
+"""
 
-        except Exception as e:
-            logger.error(f"Error processing analysis for paper {paper.title[:100]}...: {str(e)}", exc_info=True)
-            logger.debug(f"Paper fields: {list(paper_dict.keys())}")  # Just log what fields exist, not their contents
-            logger.debug(f"Analysis status: {'Success' if analysis_obj else 'Failed'}")
-            logger.debug(f"BibTeX status: {'Generated' if generated_bibtex else 'Missing'}")
+    response = await handler.process(
+        prompts=prompt,
+        model="gpt-4o-mini",
+        mode="regular",
+        response_format=combined_schema
+    )
 
-    if not ranked_papers:
-        logger.error("No papers were successfully ranked and analyzed")
-    else:
-        logger.info(f"Successfully ranked and analyzed {len(ranked_papers)} papers")
+    if not response:
+        return {}
 
-    return ranked_papers
+    response_dict = response.model_dump()
+    
+    # Split response into exclusion and extraction results
+    exclusion_fields = {name: field for name, field in combined_schema.model_fields.items() 
+                       if field.annotation == bool}
+    extraction_fields = {name: field for name, field in combined_schema.model_fields.items() 
+                        if field.annotation != bool}
+
+    return {
+        'exclusion_criteria_result': {k: v for k, v in response_dict.items() if k in exclusion_fields},
+        'extraction_result': {k: v for k, v in response_dict.items() if k in extraction_fields}
+    }
+
+async def _get_bibtex(paper: Paper) -> str:
+    """Get BibTeX for a paper, attempting multiple methods."""
+    if paper.doi:
+        bibtex = get_bibtex_from_doi(paper.doi)
+        if bibtex:
+            return bibtex
+    
+    if paper.title and paper.authors and paper.year:
+        bibtex = get_bibtex_from_title(paper.title, paper.authors, paper.year)
+        if bibtex:
+            return bibtex
+    
+    return ""
 
 def test_ranking():
     """Test the paper ranking functionality."""
@@ -346,11 +412,22 @@ def test_ranking():
             for size in [3, 5, 10, 20]
         ]
 
+        # Create simple test schemas
+        class ExclusionCriteria(BaseModel):
+            is_relevant: bool = Field(description="Is the paper relevant to the topic?")
+            has_sufficient_data: bool = Field(description="Does the paper have sufficient data?")
+
+        class ExtractionSchema(BaseModel):
+            key_findings: str = Field(description="Key findings from the paper")
+            methodology: str = Field(description="Research methodology used")
+
         for papers in test_sets:
             logger.info(f"\nTesting with {len(papers)} papers")
             ranked_papers = await rank_papers(
                 papers=papers,
                 claim="Test claim for ranking papers",
+                exclusion_schema=ExclusionCriteria,
+                extraction_schema=ExtractionSchema,
                 top_n=min(3, len(papers))
             )
 
@@ -362,6 +439,8 @@ def test_ranking():
                 assert paper.analysis, "Missing analysis"
                 assert len(paper.relevant_quotes) > 0, "Missing relevant quotes"
                 assert isinstance(paper.bibtex, str), "Missing or invalid bibtex"
+                assert paper.exclusion_criteria_result, "Missing exclusion criteria results"
+                assert paper.extraction_result, "Missing extraction results"
 
         logger.info("All ranking tests completed successfully")
 

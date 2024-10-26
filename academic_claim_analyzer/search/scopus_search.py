@@ -23,7 +23,7 @@ class ScopusSearch(BaseSearch):
             raise ValueError("SCOPUS_API_KEY not found in environment variables")
         self.base_url = "http://api.elsevier.com/content/search/scopus"
         self.request_times = deque(maxlen=6)
-        self.semaphore = asyncio.Semaphore(5)  # Limit to 5 concurrent requests
+        self.semaphore = asyncio.Semaphore(5)
 
     async def search(self, query: str, limit: int) -> List[Paper]:
         headers = {
@@ -40,7 +40,6 @@ class ScopusSearch(BaseSearch):
         async with aiohttp.ClientSession() as session:
             async with self.semaphore:
                 try:
-                    # Ensure compliance with the rate limit
                     await self._wait_for_rate_limit()
 
                     async with session.get(self.base_url, headers=headers, params=params) as response:
@@ -66,39 +65,76 @@ class ScopusSearch(BaseSearch):
     async def _parse_results(self, data: dict, session: aiohttp.ClientSession) -> List[Paper]:
         results = []
         scraper = UnifiedWebScraper(session)
-        for entry in data.get("search-results", {}).get("entry", []):
-            try:
-                year = int(entry.get("prism:coverDate", "").split("-")[0])
-            except (ValueError, IndexError):
-                year = None
-                logger.warning(f"Failed to parse year from coverDate: {entry.get('prism:coverDate')}")
+        
+        try:
+            entries = data.get("search-results", {}).get("entry", [])
+            for entry in entries:
+                try:
+                    # Parse year with improved error handling
+                    year = None
+                    cover_date = entry.get("prism:coverDate")
+                    if cover_date:
+                        try:
+                            year = int(cover_date.split("-")[0])
+                        except (ValueError, IndexError):
+                            logger.warning(f"Failed to parse year from coverDate: {cover_date}")
 
-            try:
-                citation_count = int(entry.get("citedby-count", 0))
-            except ValueError:
-                citation_count = 0
-                logger.warning(f"Failed to parse citation count: {entry.get('citedby-count')}")
+                    # Parse citation count with error handling
+                    try:
+                        citation_count = int(entry.get("citedby-count", 0))
+                    except (ValueError, TypeError):
+                        citation_count = 0
+                        logger.warning(f"Failed to parse citation count: {entry.get('citedby-count')}")
 
-            result = Paper(
-                doi=entry.get("prism:doi", ""),
-                title=entry.get("dc:title", ""),
-                authors=[author.get("authname", "") for author in entry.get("author", [])],
-                year=year,
-                abstract=entry.get("dc:description", ""),
-                source=entry.get("prism:publicationName", ""),
-                metadata={
-                    "citation_count": citation_count,
-                    "scopus_id": entry.get("dc:identifier", ""),
-                    "eid": entry.get("eid", "")
-                }
-            )
-            try:
-                if result.doi:
-                    result.full_text = await scraper.scrape(f"https://doi.org/{result.doi}")
-                if not result.full_text and result.pdf_link:
-                    result.full_text = await scraper.scrape(result.pdf_link)
-            except Exception as e:
-                logger.error(f"Error scraping full text for {result.doi or result.pdf_link}: {str(e)}")
-            results.append(result)
-        await scraper.close()
+                    # Extract authors with error handling
+                    authors = []
+                    for author in entry.get("author", []):
+                        try:
+                            author_name = author.get("authname", "").strip()
+                            if author_name:
+                                authors.append(author_name)
+                        except Exception as e:
+                            logger.warning(f"Error processing author: {str(e)}")
+                    
+                    if not authors:
+                        authors = ["Unknown Author"]
+
+                    # Create Paper object with validated fields
+                    result = Paper(
+                        doi=entry.get("prism:doi", ""),
+                        title=entry.get("dc:title", "Untitled"),
+                        authors=authors,
+                        year=year,  # Now can be None
+                        abstract=entry.get("dc:description", ""),
+                        source=entry.get("prism:publicationName", ""),
+                        metadata={
+                            "citation_count": citation_count,
+                            "scopus_id": entry.get("dc:identifier", ""),
+                            "eid": entry.get("eid", ""),
+                            "source_type": entry.get("prism:aggregationType", ""),
+                            "subtype": entry.get("subtypeDescription", "")
+                        }
+                    )
+
+                    # Attempt to get full text
+                    try:
+                        if result.doi:
+                            result.full_text = await scraper.scrape(f"https://doi.org/{result.doi}")
+                            if not result.full_text and result.pdf_link:
+                                result.full_text = await scraper.scrape(result.pdf_link)
+                    except Exception as e:
+                        logger.error(f"Error scraping full text for {result.doi or result.pdf_link}: {str(e)}")
+
+                    results.append(result)
+
+                except Exception as e:
+                    logger.error(f"Error processing Scopus entry: {str(e)}")
+                    continue
+
+        except Exception as e:
+            logger.error(f"Error parsing Scopus results: {str(e)}")
+        
+        finally:
+            await scraper.close()
+            
         return results

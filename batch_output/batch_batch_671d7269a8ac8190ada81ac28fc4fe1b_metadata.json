@@ -1,0 +1,9 @@
+{
+  "batch_id": "batch_671d7269a8ac8190ada81ac28fc4fe1b",
+  "input_file_id": "file-DyBrUdMtRoL8k9foJex49DUB",
+  "status": "completed",
+  "created_at": 1729983081,
+  "last_updated": "2024-10-26T17:53:23.178216",
+  "num_requests": 2,
+  "output_file_path": "batch_output\\batch_batch_671d7269a8ac8190ada81ac28fc4fe1b_output.jsonl"
+}

@@ -1,15 +1,25 @@
-- claim: "Urban green spaces enhance community well-being"
-  exclusion_criteria:
-    is_review:
-      type: "boolean"
-      description: "Is the paper a review article? True if yes."
-    published_before_2010:
-      type: "boolean"
-      description: "Was the paper published before 2010? True if yes."
-  information_extraction:
-    discussed_topics:
-      type: "list"
-      description: "List of key topics discussed in the paper."
-    methodology:
-      type: "string"
-      description: "Brief description of the methodology used in the paper."
+config:
+  processing:
+    num_queries: 5
+    papers_per_query: 7
+    num_papers_to_return: 3
+  
+  logging:
+    level: INFO
+    file: batch_process.log
+
+
+claims:
+  - id: green_spaces
+    claim: "Urban green spaces enhance community well-being"
+    config:
+      num_queries: 3
+      papers_per_query: 5
+    exclusion_criteria:
+      is_review:
+        type: boolean
+        description: "Is the paper a review article? True if yes."
+    information_extraction:
+      discussed_topics:
+        type: list
+        description: "List of key topics discussed in the paper."

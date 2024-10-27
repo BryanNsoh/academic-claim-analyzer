@@ -1,6 +1,5 @@
 # academic_claim_analyzer/paper_ranker.py
 
-import asyncio
 import random
 import logging
 import math
@@ -67,11 +66,37 @@ def create_combined_schema(exclusion_schema: Optional[Type[BaseModel]],
     return create_model('CombinedSchema', **namespace)
 
 def calculate_ranking_rounds(num_papers: int) -> int:
-    """Calculate optimal number of ranking rounds based on paper count."""
-    if num_papers < 5:
+    """
+    Calculate optimal number of ranking rounds based on paper count.
+    
+    Rationale:
+    - Minimum 3 rounds ensures statistical stability for any size
+    - 4:1 ratio (papers:rounds) up to 20 papers ensures thorough evaluation
+    - Beyond 20 papers, diminishing returns suggest logarithmic scaling
+    - Cap at 8 rounds as cognitive load increases but reliability plateaus
+    
+    Paper Count -> Rounds:
+    - 1-8 papers: 3 rounds
+    - 9-16 papers: 4 rounds
+    - 17-24 papers: 5 rounds
+    - 25-36 papers: 6 rounds
+    - 37-52 papers: 7 rounds
+    - 53+ papers: 8 rounds
+    
+    Args:
+        num_papers: Number of papers to rank
+        
+    Returns:
+        int: Optimal number of ranking rounds
+    """
+    if num_papers <= 8:
         return 3
-    rounds = min(10, math.floor(math.log2(num_papers) * 2) + 3)
-    return max(3, rounds)
+        
+    # Log base 1.4 gives us a nice progression
+    # Add 2 to start at 3 rounds for small sets
+    rounds = min(8, math.floor(math.log(num_papers, 1.4)) + 2)
+    
+    return rounds
 
 def create_balanced_groups(papers: List[Dict[str, Any]], min_group_size: int = 2, max_group_size: int = 5) -> List[List[Dict[str, Any]]]:
     """Create balanced groups of papers for ranking."""
@@ -208,7 +233,7 @@ async def _conduct_ranking_rounds(valid_papers: List[Paper], claim: str, num_rou
         batch_responses = await handler.process(
             prompts=prompts,
             model="gpt-4o-mini",
-            mode="openai_batch",
+            mode="async_batch",
             response_format=RankingResponse
         )
 

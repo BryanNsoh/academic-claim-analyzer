@@ -27,7 +27,7 @@ claims:
       small_dataset:
         type: boolean
         description: "Dataset contains fewer than 1000 images"
-    information_extraction:
+    data_extraction_schema:
       accuracy:
         type: float
         description: "Model accuracy percentage"
@@ -40,23 +40,3 @@ claims:
       hardware_specs:
         type: string
         description: "Computing resources used"
-
-  - id: iot_irrigation
-    claim: "IoT sensor networks improve irrigation efficiency"
-    exclusion_criteria:
-      theoretical_only:
-        type: boolean
-        description: "Paper is theoretical without implementation"
-      no_metrics:
-        type: boolean
-        description: "No quantitative efficiency metrics provided"
-    information_extraction:
-      water_savings:
-        type: float
-        description: "Percentage reduction in water usage"
-      implementation_cost:
-        type: float
-        description: "Cost per hectare in USD"
-      sensor_types:
-        type: list
-        description: "Types of sensors used"

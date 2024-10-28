@@ -15,12 +15,14 @@ logger = logging.getLogger(__name__)
 async def analyze_claim(
     claim: str,
     exclusion_criteria: Optional[Dict[str, Any]] = None,
-    extraction_schema: Optional[Dict[str, Any]] = None,
+    data_extraction_schema: Optional[Dict[str, Any]] = None,  # Changed from extraction_schema
     num_queries: int = 2,
     papers_per_query: int = 2,
     num_papers_to_return: int = 2
 ) -> ClaimAnalysis:
     """Analyze a claim and return results."""
+    logger.info(f"Analyzing claim with exclusion criteria: {exclusion_criteria}")
+    logger.info(f"Data extraction schema: {data_extraction_schema}")  # Updated log message
     analysis = ClaimAnalysis(
         claim=claim,
         parameters={
@@ -36,9 +38,9 @@ async def analyze_claim(
             ExclusionCriteriaModel = create_model_from_schema('ExclusionCriteria', exclusion_criteria)
             analysis.exclusion_schema = ExclusionCriteriaModel
 
-        if extraction_schema:
-            ExtractionSchemaModel = create_model_from_schema('ExtractionSchema', extraction_schema)
-            analysis.extraction_schema = ExtractionSchemaModel
+        if data_extraction_schema:  # Updated variable name
+            ExtractionSchemaModel = create_model_from_schema('DataExtractionSchema', data_extraction_schema)
+            analysis.data_extraction_schema = ExtractionSchemaModel
         
         await _perform_analysis(analysis)
     except Exception as e:
@@ -59,18 +61,22 @@ def create_model_from_schema(model_name: str, schema: Dict[str, Any]) -> Type[Ba
 
         if field_type == 'number':
             python_type = float
+            description += " (Must be a decimal number. Use -1.0 if unknown)"
             json_type = 'number'
-            default_value = 0.0
+            default_value = -1.0
         elif field_type == 'integer':
             python_type = int
+            description += " (Must be a whole number. Use -1 if unknown)"
             json_type = 'integer'
-            default_value = 0
+            default_value = -1
         elif field_type == 'boolean':
             python_type = bool
+            description += " (Must be true or false)"
             json_type = 'boolean'
             default_value = False
         elif field_type == 'array':
             python_type = List[str]
+            description += " (Must be a list of strings. Use empty list [] if none)"
             json_type = 'array'
             default_value = []
             properties[field_name] = {
@@ -83,15 +89,17 @@ def create_model_from_schema(model_name: str, schema: Dict[str, Any]) -> Type[Ba
             continue
         else:
             python_type = str
+            description += " (Must be a string. Use 'N/A' if unknown)"
             json_type = 'string'
-            default_value = ""
+            default_value = "N/A"
 
         annotations[field_name] = python_type
         fields[field_name] = Field(default=default_value, description=description)
         if field_name not in properties:
             properties[field_name] = {
                 'type': json_type,
-                'description': description
+                'description': description,
+                'examples': [default_value]  # Add examples
             }
 
     namespace = {
@@ -102,7 +110,11 @@ def create_model_from_schema(model_name: str, schema: Dict[str, Any]) -> Type[Ba
                 'type': 'object',
                 'required': list(annotations.keys()),
                 'additionalProperties': False,
-                'properties': properties
+                'properties': properties,
+                'examples': [{  # Add complete example
+                    name: props['examples'][0] 
+                    for name, props in properties.items()
+                }]
             }
         }
     }
@@ -133,10 +145,11 @@ async def _formulate_queries(analysis: ClaimAnalysis) -> None:
     except Exception as e:
         logger.error(f"Error formulating queries: {str(e)}", exc_info=True)
         raise
-
 async def _perform_searches(analysis: ClaimAnalysis) -> None:
     """Execute searches across different platforms."""
     search_tasks = []
+    papers_per_query = analysis.parameters["papers_per_query"]  
+    print(f"Papers per query: {papers_per_query}")
     
     try:
         # OpenAlex search
@@ -144,7 +157,7 @@ async def _perform_searches(analysis: ClaimAnalysis) -> None:
         openalex_queries = [q for q in analysis.queries if q.source == "openalex"]
         for query in openalex_queries:
             search_tasks.append(_search_and_add_results(
-                openalex_search, query.query, analysis.parameters["papers_per_query"], analysis
+                openalex_search, query.query, papers_per_query, analysis
             ))
         
         # Scopus search
@@ -152,13 +165,13 @@ async def _perform_searches(analysis: ClaimAnalysis) -> None:
         scopus_queries = [q for q in analysis.queries if q.source == "scopus"]
         for query in scopus_queries:
             search_tasks.append(_search_and_add_results(
-                scopus_search, query.query, analysis.parameters["papers_per_query"], analysis
+                scopus_search, query.query, papers_per_query, analysis
             ))
         
         # CORE search
         core_search = CORESearch()
         search_tasks.append(_search_and_add_results(
-            core_search, analysis.claim, analysis.parameters["papers_per_query"], analysis
+            core_search, analysis.claim, papers_per_query, analysis
         ))
 
         await asyncio.gather(*search_tasks)
@@ -185,7 +198,7 @@ async def _apply_exclusion_criteria(analysis: ClaimAnalysis) -> None:
         logger.warning("No search results to apply exclusion criteria to.")
         return
         
-    if not analysis.exclusion_schema and not analysis.extraction_schema:
+    if not analysis.exclusion_schema and not analysis.data_extraction_schema:  # Updated variable name
         logger.info("No exclusion criteria or extraction schema provided. Skipping this step.")
         return
 
@@ -195,7 +208,7 @@ async def _apply_exclusion_criteria(analysis: ClaimAnalysis) -> None:
     # Build prompts for batch processing
     prompts = []
     ranked_papers = []
-    CombinedSchema = create_combined_schema(analysis.exclusion_schema, analysis.extraction_schema)
+    CombinedSchema = create_combined_schema(analysis.exclusion_schema, analysis.data_extraction_schema)
     for paper in papers_to_evaluate:
         # Convert Paper to RankedPaper
         ranked_paper = RankedPaper(
@@ -249,9 +262,9 @@ Your response must be valid JSON matching exactly the required schema.
                 ranked_paper.exclusion_criteria_result = exclusion_result
 
             # Extract information
-            if analysis.extraction_schema:
+            if analysis.data_extraction_schema:  # Updated variable name
                 extraction_result = {}
-                for field_name in analysis.extraction_schema.model_fields:
+                for field_name in analysis.data_extraction_schema.model_fields:
                     if hasattr(response, field_name):
                         value = getattr(response, field_name)
                         extraction_result[field_name] = value
@@ -337,7 +350,7 @@ async def _rank_papers(analysis: ClaimAnalysis) -> None:
             papers=analysis.search_results,
             claim=analysis.claim,
             exclusion_schema=analysis.exclusion_schema,
-            extraction_schema=analysis.extraction_schema
+            data_extraction_schema=analysis.data_extraction_schema
         )
         for paper in ranked_papers:
             if isinstance(paper, RankedPaper):
@@ -345,3 +358,4 @@ async def _rank_papers(analysis: ClaimAnalysis) -> None:
     except Exception as e:
         logger.error(f"Error ranking papers: {str(e)}", exc_info=True)
         raise
+

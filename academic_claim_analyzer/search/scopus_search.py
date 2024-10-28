@@ -1,4 +1,5 @@
 # academic_claim_analyzer/search/scopus_search.py
+# To run: python -m academic_claim_analyzer.search.scopus_search
 
 import aiohttp
 import asyncio
@@ -6,6 +7,7 @@ import os
 from typing import List
 from collections import deque
 import time
+from datetime import datetime
 from dotenv import load_dotenv
 from .base import BaseSearch
 from ..models import Paper
@@ -51,7 +53,7 @@ class ScopusSearch(BaseSearch):
         
         params = {
             "query": query,
-            "count": limit,
+            "count": limit,  # Only request the number we need
             "view": "COMPLETE",
             "sort": "-citedby-count"
         }
@@ -73,7 +75,7 @@ class ScopusSearch(BaseSearch):
                                 logger.info("Scopus: No results found for query")
                                 return []
                                 
-                            return await self._parse_results(data, session)
+                            return await self._parse_results(data, session, limit)
                             
                         else:
                             logger.error(f"Scopus: API error {response.status}")
@@ -96,16 +98,23 @@ class ScopusSearch(BaseSearch):
             await asyncio.sleep(wait_time)
         self.request_times.append(current_time)
 
-    async def _parse_results(self, data: dict, session: aiohttp.ClientSession) -> List[Paper]:
+    async def _parse_results(self, data: dict, session: aiohttp.ClientSession, limit: int) -> List[Paper]:
         """Parse Scopus results with improved error handling and logging."""
         results = []
         scraper = UnifiedWebScraper(session)
         
         try:
             entries = data.get("search-results", {}).get("entry", [])
-            logger.info(f"Scopus: Processing {len(entries)} results")
+            logger.info(f"Scopus: Processing {min(len(entries), limit)} results")
             
-            for entry in entries:
+            # Sort entries by citation count before processing
+            sorted_entries = sorted(
+                entries,
+                key=lambda x: int(x.get("citedby-count", 0)),
+                reverse=True
+            )[:limit]  # Only take top N entries
+            
+            for entry in sorted_entries:
                 try:
                     # Extract and validate year
                     year = -1
@@ -152,9 +161,13 @@ class ScopusSearch(BaseSearch):
                         }
                     )
 
-                    # Attempt to get full text
+                    # Only attempt to get full text if we have a DOI
                     if result.doi:
-                        result.full_text = await scraper.scrape(f"https://doi.org/{result.doi}")
+                        try:
+                            result.full_text = await scraper.scrape(f"https://doi.org/{result.doi}")
+                        except Exception as e:
+                            logger.debug(f"Failed to get full text for {result.title}: {str(e)}")
+                            result.full_text = None
 
                     # Validate result has minimum required data
                     if result.title and (result.abstract or result.full_text):
@@ -174,3 +187,93 @@ class ScopusSearch(BaseSearch):
             await scraper.close()
             
         return results
+
+if __name__ == "__main__":
+    # Configure logging
+    log_dir = "logs/scopus"
+    os.makedirs(log_dir, exist_ok=True)
+    
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        handlers=[
+            logging.FileHandler(f"{log_dir}/test_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"),
+            logging.StreamHandler()
+        ]
+    )
+
+    async def run_test():
+        # Test cases with different limits and queries
+        test_cases = [
+            {
+                "query": 'TITLE-ABS-KEY((\"precision agriculture\" OR \"precision farming\") AND (\"machine learning\" OR \"AI\") AND \"water\")',
+                "limit": 2,
+                "description": "Testing small limit (2 papers)"
+            },
+            {
+                "query": 'TITLE-ABS-KEY((iot OR \"internet of things\") AND (irrigation OR watering) AND sensor*)',
+                "limit": 5,
+                "description": "Testing medium limit (5 papers)"
+            },
+            {
+                "query": 'TITLE-ABS-KEY((\"precision farming\" OR \"precision agriculture\") AND (\"deep learning\" OR \"neural networks\") AND \"water\")',
+                "limit": 1,
+                "description": "Testing minimum limit (1 paper)"
+            }
+        ]
+
+        try:
+            searcher = ScopusSearch()
+            
+            for i, test_case in enumerate(test_cases, 1):
+                logger.info(f"\n{'='*50}")
+                logger.info(f"Test Case {i}/{len(test_cases)}: {test_case['description']}")
+                logger.info(f"Requested limit: {test_case['limit']}")
+                logger.info(f"Query: {test_case['query']}")
+                
+                try:
+                    start_time = time.time()
+                    results = await searcher.search(test_case['query'], limit=test_case['limit'])
+                    elapsed_time = time.time() - start_time
+                    
+                    logger.info(f"\nResults Summary:")
+                    logger.info(f"Retrieved {len(results)} papers (limit was {test_case['limit']})")
+                    logger.info(f"Processing time: {elapsed_time:.2f} seconds")
+                    
+                    if len(results) > test_case['limit']:
+                        logger.error(f"LIMIT VIOLATION: Got {len(results)} results, expected <= {test_case['limit']}")
+                    
+                    # Log paper details
+                    for j, paper in enumerate(results, 1):
+                        logger.info(f"\nPaper {j}:")
+                        logger.info(f"Title: {paper.title}")
+                        logger.info(f"Authors: {', '.join(paper.authors)}")
+                        logger.info(f"Year: {paper.year}")
+                        logger.info(f"DOI: {paper.doi}")
+                        logger.info(f"Abstract length: {len(paper.abstract)} chars")
+                        logger.info(f"Full text length: {len(paper.full_text) if paper.full_text else 0} chars")
+                        logger.info(f"Citation count: {paper.citation_count}")
+                        
+                        # Verify we have either abstract or full text
+                        if not paper.abstract and not paper.full_text:
+                            logger.warning(f"Paper {j} has no content (neither abstract nor full text)")
+                        
+                        logger.info("Metadata:")
+                        for key, value in paper.metadata.items():
+                            logger.info(f"  {key}: {value}")
+                    
+                except Exception as e:
+                    logger.error(f"Error processing test case {i}: {str(e)}", exc_info=True)
+                    continue
+                
+                logger.info(f"\nCompleted test case {i}")
+                await asyncio.sleep(2)  # Rate limiting between tests
+                
+        except Exception as e:
+            logger.error(f"Test execution failed: {str(e)}", exc_info=True)
+
+    # Add time tracking
+    start_time = time.time()
+    asyncio.run(run_test())
+    total_time = time.time() - start_time
+    logger.info(f"\nTotal test execution time: {total_time:.2f} seconds")

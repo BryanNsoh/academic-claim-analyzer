@@ -8,6 +8,7 @@ from pydantic import BaseModel, Field, create_model
 from .models import Paper, RankedPaper
 from .llm_api_handler import LLMAPIHandler
 from .search.bibtex import get_bibtex_from_doi, get_bibtex_from_title
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -132,15 +133,15 @@ def create_balanced_groups(papers: List[Dict[str, Any]], min_group_size: int = 2
         return [papers]
 
 async def rank_papers(papers: List[Paper], claim: str, exclusion_schema: Optional[Type[BaseModel]] = None,
-                     extraction_schema: Optional[Type[BaseModel]] = None, top_n: int = 5) -> List[RankedPaper]:
+                     data_extraction_schema: Optional[Type[BaseModel]] = None, top_n: int = 5) -> List[RankedPaper]:
     """Rank papers based on their relevance to the given claim."""
     handler = LLMAPIHandler()
     logger.info(f"Starting to rank {len(papers)} papers")
 
     # Create combined schema for evaluation if needed
     combined_schema = None
-    if exclusion_schema or extraction_schema:
-        combined_schema = create_combined_schema(exclusion_schema, extraction_schema)
+    if exclusion_schema or data_extraction_schema:
+        combined_schema = create_combined_schema(exclusion_schema, data_extraction_schema)
         logger.info("Created combined schema for paper evaluation")
 
     valid_papers = [
@@ -194,8 +195,9 @@ async def rank_papers(papers: List[Paper], claim: str, exclusion_schema: Optiona
                 'relevance_score': average_scores.get(paper.id, 0.0),
                 'analysis': analysis_obj.analysis,
                 'relevant_quotes': analysis_obj.relevant_quotes,
+                # Fix 1: Use correct key names from evaluation_results
                 'exclusion_criteria_result': evaluation_results.get('exclusion_criteria_result', {}),
-                'extraction_result': evaluation_results.get('extraction_result', {})
+                'extraction_result': evaluation_results.get('extracted_data', {})  # Fix key name mismatch
             })
 
             # Create ranked paper with clean data
@@ -373,38 +375,82 @@ async def _evaluate_paper(paper: Paper, combined_schema: Type[BaseModel],
     if not combined_schema:
         return {}
 
+    # Get exact schema definition
+    schema_json = combined_schema.model_json_schema()
+    schema_str = json.dumps(schema_json, indent=2)
+
     prompt = f"""
-Evaluate this paper against the provided criteria:
+STRICT SCHEMA COMPLIANCE REQUIRED
+================================
 
-Title: {paper.title}
-Abstract: {paper.abstract or ''}
-Full Text: {paper.full_text[:1000] if paper.full_text else ''}...
+Evaluate this paper according to the following schema EXACTLY:
 
-Provide evaluation results according to the schema.
+{schema_str}
+
+REQUIREMENTS:
+- Your response MUST be valid JSON
+- ALL numeric fields MUST be integers (use -1 if unknown)
+- ALL fields are required
+- NO additional fields allowed
+- EXACT field names must be used
+- Boolean fields must be true/false only
+- String fields must use "N/A" if unknown
+
+Paper to evaluate:
+Title: {paper.title or 'Unknown Title'}
+Abstract: {paper.abstract or 'No abstract available'}
+Full Text Excerpt: {paper.full_text or 'No full text available'}
+
+RESPOND WITH VALID JSON ONLY. NO EXPLANATIONS OR ADDITIONAL TEXT.
 """
 
-    response = await handler.process(
-        prompts=prompt,
-        model="gpt-4o-mini",
-        mode="regular",
-        response_format=combined_schema
-    )
+    try:
+        response = await handler.process(
+            prompts=prompt,
+            model="gpt-4o-mini",
+            mode="regular",
+            response_format=combined_schema
+        )
 
-    if not response:
-        return {}
+        if not response:
+            logger.warning("No response received from LLM")
+            return {
+                'exclusion_criteria_result': {},
+                'extracted_data': {}
+            }
 
-    response_dict = response.model_dump()
-    
-    # Split response into exclusion and extraction results
-    exclusion_fields = {name: field for name, field in combined_schema.model_fields.items() 
-                       if field.annotation == bool}
-    extraction_fields = {name: field for name, field in combined_schema.model_fields.items() 
-                        if field.annotation != bool}
+        # Convert response to dict if it's a model
+        response_dict = response.model_dump() if hasattr(response, 'model_dump') else response
 
-    return {
-        'exclusion_criteria_result': {k: v for k, v in response_dict.items() if k in exclusion_fields},
-        'extraction_result': {k: v for k, v in response_dict.items() if k in extraction_fields}
-    }
+        # Separate boolean fields (exclusion criteria) from other fields (extracted data)
+        exclusion_fields = {}
+        extraction_fields = {}
+        
+        for field_name, value in response_dict.items():
+            if isinstance(value, bool):
+                exclusion_fields[field_name] = value
+            else:
+                extraction_fields[field_name] = value
+
+        return {
+            'exclusion_criteria_result': exclusion_fields,
+            'extracted_data': extraction_fields
+        }
+
+    except Exception as e:
+        logger.error(f"Error evaluating paper: {str(e)}", exc_info=True)
+        # Return partial results if available
+        try:
+            response_dict = response.model_dump() if hasattr(response, 'model_dump') else {}
+            return {
+                'exclusion_criteria_result': {k: v for k, v in response_dict.items() if isinstance(v, bool)},
+                'extracted_data': {k: v for k, v in response_dict.items() if not isinstance(v, bool)}
+            }
+        except:
+            return {
+                'exclusion_criteria_result': {},
+                'extracted_data': {}
+            }
 
 async def _get_bibtex(paper: Paper) -> str:
     """Get BibTeX for a paper, attempting multiple methods."""
@@ -452,7 +498,7 @@ def test_ranking():
                 papers=papers,
                 claim="Test claim for ranking papers",
                 exclusion_schema=ExclusionCriteria,
-                extraction_schema=ExtractionSchema,
+                data_extraction_schema=ExtractionSchema,
                 top_n=min(3, len(papers))
             )
 
@@ -465,7 +511,7 @@ def test_ranking():
                 assert len(paper.relevant_quotes) > 0, "Missing relevant quotes"
                 assert isinstance(paper.bibtex, str), "Missing or invalid bibtex"
                 assert paper.exclusion_criteria_result, "Missing exclusion criteria results"
-                assert paper.extraction_result, "Missing extraction results"
+                assert paper.extracted_data, "Missing extracted data"
 
         logger.info("All ranking tests completed successfully")
 
@@ -475,3 +521,4 @@ def test_ranking():
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
     test_ranking()
+

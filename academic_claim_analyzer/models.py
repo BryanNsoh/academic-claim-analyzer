@@ -8,25 +8,9 @@ class FlexibleNumericField:
     """Mixin for handling numeric fields that may come back as text."""
     @classmethod
     def convert_to_int(cls, v: Any) -> int:
-        """Convert various inputs to integers with fallback to -1."""
-        if v is None:
-            return -1
-        if isinstance(v, (int, float)):
-            return int(v)
-        if isinstance(v, str):
-            # Strip any text markers
-            v = v.strip().lower()
-            if v in ('n/a', 'na', 'none', '', 'not applicable', 'not available', 
-                    'not specified', 'unknown', 'null'):
-                return -1
-            # Try to extract any numbers from the text
-            import re
-            numbers = re.findall(r'\d+', v)
-            if numbers:
-                try:
-                    return int(numbers[0])
-                except (ValueError, TypeError):
-                    return -1
+        """Convert any non-integer input to -1."""
+        if isinstance(v, int):
+            return v
         return -1
 
 class SearchQuery(BaseModel):
@@ -98,7 +82,7 @@ class ClaimAnalysis(BaseModel):
     ranked_papers: List[RankedPaper] = Field(default_factory=list)
     metadata: Dict[str, Any] = Field(default_factory=dict)
     exclusion_schema: Optional[Type[BaseModel]] = None
-    extraction_schema: Optional[Type[BaseModel]] = None
+    data_extraction_schema: Optional[Type[BaseModel]] = None  # Changed from extraction_schema
 
     class Config:
         json_encoders = {
@@ -136,7 +120,7 @@ class ClaimAnalysis(BaseModel):
             'claim': self.claim,
             'timestamp': self.timestamp.isoformat(),
             'parameters': self.parameters,
-            'queries': [q.dict() for q in self.queries],
+            'queries': [q.model_dump() for q in self.queries],
             'ranked_papers': [
                 {
                     'title': p.title,
@@ -144,10 +128,12 @@ class ClaimAnalysis(BaseModel):
                     'year': p.year,
                     'relevance_score': p.relevance_score,
                     'analysis': p.analysis,
-                    'relevant_quotes': p.relevant_quotes[:3],  # Limit quotes
+                    'relevant_quotes': p.relevant_quotes,
+                    'extraction_result': p.extraction_result,
+                    'exclusion_criteria_result': p.exclusion_criteria_result,
                     'metadata': p.metadata
                 }
-                for p in self.get_top_papers(5)  # Only include top 5 papers
+                for p in self.get_top_papers(5)
             ],
             'metadata': self.metadata
         }

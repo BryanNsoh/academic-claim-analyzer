@@ -1,9 +1,0 @@
-{
-  "batch_id": "batch_671d72e3cfb0819082fe8347e1868340",
-  "input_file_id": "file-4A9Iu0QKv7Nv1P8gAvd6V942",
-  "status": "completed",
-  "created_at": 1729983203,
-  "last_updated": "2024-10-26T17:54:24.671876",
-  "num_requests": 2,
-  "output_file_path": "batch_output\\batch_batch_671d72e3cfb0819082fe8347e1868340_output.jsonl"
-}

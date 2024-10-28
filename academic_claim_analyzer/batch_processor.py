@@ -1,4 +1,5 @@
 # academic_claim_analyzer/batch_processor.py
+# To run: python -m academic_claim_analyzer.batch_processor
 
 import asyncio
 import json
@@ -70,10 +71,23 @@ def load_claims_from_yaml(yaml_file: str) -> List[Dict[str, Any]]:
             
         claims_data = []
         if isinstance(data, list):
-            claims_data = [item for item in data if 'claim' in item]
+            for item in data:
+                if 'claim' in item:
+                    claim_data = {
+                        'claim': item['claim'],
+                        'exclusion_criteria': item.get('exclusion_criteria', {}),
+                        'data_extraction_schema': item.get('data_extraction_schema', {}),  # Changed from information_extraction
+                        'config': item.get('config', {})
+                    }
+                    claims_data.append(claim_data)
         elif isinstance(data, dict):
             if 'claim' in data:
-                claims_data = [data]
+                claims_data = [{
+                    'claim': data['claim'],
+                    'exclusion_criteria': data.get('exclusion_criteria', {}),
+                    'data_extraction_schema': data.get('data_extraction_schema', {}),  # Changed from information_extraction
+                    'config': data.get('config', {})
+                }]
             elif 'claims' in data:
                 claims_data = data['claims']
                 
@@ -90,40 +104,20 @@ async def process_claims(claims_data: List[Dict[str, Any]], config: BatchProcess
     """Process a list of claims using the provided configuration."""
     results = {}
     
-    if not isinstance(claims_data, list):
-        logger.error("Claims data must be a list")
-        return results
-        
     for claim_data in claims_data:
-        if not isinstance(claim_data, dict):
-            logger.warning(f"Skipping invalid claim data format: {type(claim_data)}")
-            continue
-            
         claim_text = claim_data.get('claim')
         if not claim_text:
-            logger.warning("No 'claim' found in claim data. Skipping.")
             continue
             
-        exclusion_criteria = claim_data.get('exclusion_criteria')
-        extraction_schema = claim_data.get('information_extraction')
-        
-        # Apply any claim-specific overrides
-        claim_config = claim_data.get('config', {})
-        num_queries = claim_config.get('num_queries', config.num_queries)
-        papers_per_query = claim_config.get('papers_per_query', config.papers_per_query)
-        num_papers = claim_config.get('num_papers_to_return', config.num_papers_to_return)
-
-        logger.info(f"Processing claim: {claim_text[:100]}...")
-        
         try:
-            # Process the claim
+            # Process the claim - FIXED parameter name here
             analysis = await analyze_claim(
                 claim=claim_text,
-                exclusion_criteria=exclusion_criteria,
-                extraction_schema=extraction_schema,
-                num_queries=num_queries,
-                papers_per_query=papers_per_query,
-                num_papers_to_return=num_papers
+                exclusion_criteria=claim_data.get('exclusion_criteria'),
+                data_extraction_schema=claim_data.get('data_extraction_schema'),  # FIXED: was 'extraction_schema'
+                num_queries=claim_data.get('config', {}).get('num_queries', config.num_queries),
+                papers_per_query=claim_data.get('config', {}).get('papers_per_query', config.papers_per_query),
+                num_papers_to_return=claim_data.get('config', {}).get('num_papers_to_return', config.num_papers_to_return)
             )
             
             if isinstance(analysis, ClaimAnalysis):
@@ -137,39 +131,40 @@ async def process_claims(claims_data: List[Dict[str, Any]], config: BatchProcess
             
     return results
 
-def extract_concise_results(full_results: Dict[str, Any], num_papers: int) -> Dict[str, Any]:
-    """Extract the essential analysis results from the full analysis, keeping only top N papers."""
+def extract_concise_results(results: Dict[str, Any], num_papers: int = 5) -> Dict[str, Any]:
+    """Extract concise results from analysis."""
     concise_results = {}
-    
-    for claim, result in full_results.items():
-        if isinstance(result, dict):
-            # Sort papers by relevance score and take top N
-            ranked_papers = result.get('ranked_papers', [])
-            sorted_papers = sorted(
-                ranked_papers,
-                key=lambda x: x.get('relevance_score', 0),
-                reverse=True
-            )[:num_papers]
-            
+    for claim, analysis in results.items():
+        if isinstance(analysis, ClaimAnalysis):
+            # Get top papers directly from ClaimAnalysis object
+            ranked_papers = analysis.get_top_papers(num_papers)
             concise_papers = []
-            for paper in sorted_papers:
+            
+            for paper in ranked_papers:
                 concise_paper = {
-                    'title': paper.get('title', ''),
-                    'authors': paper.get('authors', []),
-                    'year': paper.get('year'),
-                    'bibtex': paper.get('bibtex', ''),
-                    'relevant_quotes': paper.get('relevant_quotes', []),
-                    'analysis': paper.get('analysis', ''),
-                    'exclusion_criteria_result': paper.get('exclusion_criteria_result', {}),
-                    'extraction_result': paper.get('extraction_result', {}),
-                    'relevance_score': paper.get('relevance_score')
+                    'title': paper.title,
+                    'authors': paper.authors,
+                    'year': paper.year,
+                    'bibtex': paper.bibtex,
+                    'relevant_quotes': paper.relevant_quotes[:3],
+                    'analysis': paper.analysis,
+                    'extraction_result': paper.extraction_result,
+                    'exclusion_criteria_result': paper.exclusion_criteria_result
                 }
                 concise_papers.append(concise_paper)
-                
+            
             concise_results[claim] = {
                 'ranked_papers': concise_papers,
-                'num_total_papers': len(ranked_papers)
+                'num_total_papers': len(analysis.ranked_papers)
             }
+            
+            # Debug logging
+            logger.debug(f"Processed claim: {claim}")
+            logger.debug(f"Number of ranked papers: {len(ranked_papers)}")
+            logger.debug(f"First paper extraction result: {ranked_papers[0].extraction_result if ranked_papers else 'No papers'}")
+            
+        else:
+            logger.error(f"Invalid analysis object type: {type(analysis)}")
             
     return concise_results
 
@@ -228,7 +223,16 @@ def batch_analyze_claims(yaml_file: str) -> None:
             
             # Extract this claim's results
             claim_results = {claim_text: results[claim_text]} if claim_text in results else {}
+            
+            # Log the full results before processing
+            if claim_results:
+                logger.info(f"Full results for claim before processing: {claim_results}")
+            
             concise_results = extract_concise_results(claim_results, num_papers)
+            
+            # Log the concise results
+            if concise_results:
+                logger.info(f"Concise results for claim: {concise_results}")
             
             # Generate filenames with claim ID
             base_filename = f"{claim_id}_{timestamp}"
@@ -249,4 +253,4 @@ def batch_analyze_claims(yaml_file: str) -> None:
 
 
 if __name__ == "__main__":
-    batch_analyze_claims(r"C:\Users\bnsoh2\OneDrive - University of Nebraska-Lincoln\Documents\Projects\ACADEMIC LITERATURE UTILITIES\academic-claim-analyzer\reviewer_run\all_comments.yaml")
+    batch_analyze_claims(r"C:\Users\bnsoh2\OneDrive - University of Nebraska-Lincoln\Documents\Projects\ACADEMIC LITERATURE UTILITIES\academic-claim-analyzer\batch_test\test_yaml.yaml")

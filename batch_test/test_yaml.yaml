@@ -1,25 +1,62 @@
 config:
   processing:
     num_queries: 5
-    papers_per_query: 7
+    papers_per_query: 2
     num_papers_to_return: 3
   
   logging:
     level: INFO
-    file: batch_process.log
-
+  
+  search:
+    platforms:
+      - openalex
+      - scopus
+      - core
+    min_year: 2010
+    max_year: 2024
 
 claims:
-  - id: green_spaces
-    claim: "Urban green spaces enhance community well-being"
-    config:
-      num_queries: 3
-      papers_per_query: 5
+  - id: deep_learning_crops
+    claim: "Deep learning outperforms traditional methods in crop disease detection"
+    config:              # Claim-specific processing overrides
+      num_papers_to_return: 5
     exclusion_criteria:
-      is_review:
+      no_comparison:
         type: boolean
-        description: "Is the paper a review article? True if yes."
+        description: "No comparison with traditional methods"
+      small_dataset:
+        type: boolean
+        description: "Dataset contains fewer than 1000 images"
     information_extraction:
-      discussed_topics:
+      accuracy:
+        type: float
+        description: "Model accuracy percentage"
+      dataset_size:
+        type: integer
+        description: "Number of images in dataset"
+      methods:
         type: list
-        description: "List of key topics discussed in the paper."
+        description: "ML methods compared"
+      hardware_specs:
+        type: string
+        description: "Computing resources used"
+
+  - id: iot_irrigation
+    claim: "IoT sensor networks improve irrigation efficiency"
+    exclusion_criteria:
+      theoretical_only:
+        type: boolean
+        description: "Paper is theoretical without implementation"
+      no_metrics:
+        type: boolean
+        description: "No quantitative efficiency metrics provided"
+    information_extraction:
+      water_savings:
+        type: float
+        description: "Percentage reduction in water usage"
+      implementation_cost:
+        type: float
+        description: "Cost per hectare in USD"
+      sensor_types:
+        type: list
+        description: "Types of sensors used"

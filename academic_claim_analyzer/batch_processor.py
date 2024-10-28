@@ -249,4 +249,4 @@ def batch_analyze_claims(yaml_file: str) -> None:
 
 
 if __name__ == "__main__":
-    batch_analyze_claims(r"C:\Users\bnsoh2\OneDrive - University of Nebraska-Lincoln\Documents\Projects\ACADEMIC LITERATURE UTILITIES\academic-claim-analyzer\batch_test\test_yaml.yaml")
+    batch_analyze_claims(r"C:\Users\bnsoh2\OneDrive - University of Nebraska-Lincoln\Documents\Projects\ACADEMIC LITERATURE UTILITIES\academic-claim-analyzer\reviewer_run\all_comments.yaml")

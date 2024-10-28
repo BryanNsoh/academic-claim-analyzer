@@ -1,0 +1,419 @@
+config:
+  processing:
+    num_queries: 6
+    papers_per_query: 7
+    num_papers_to_return: 3
+  
+  logging:
+    level: INFO
+  
+  search:
+    platforms:
+      - openalex
+      - scopus
+      - core
+    min_year: 2005
+    max_year: 2024
+
+claims:
+  - id: reviewer1_comment2_energy_savings
+    claim: "Automated irrigation systems achieve quantifiable energy savings compared to traditional irrigation methods"
+    exclusion_criteria:
+      theoretical_only:
+        type: boolean
+        description: "Study presents only theoretical calculations without actual field measurements"
+      incomplete_data:
+        type: boolean
+        description: "Study lacks baseline comparison with traditional irrigation methods"
+    information_extraction:
+      energy_reduction:
+        type: float
+        description: "Please extract the percentage reduction in energy consumption achieved by the automated system compared to traditional methods. This should be based on measured data, not projections. If no specific percentage is reported, enter 'N/A'."
+      cost_savings:
+        type: float
+        description: "Please extract the annual energy cost savings per hectare in USD. If reported in different currency, include the converted value. If no cost savings are reported, enter 'N/A'."
+      measurement_duration:
+        type: string
+        description: "Please specify the duration over which energy savings were measured, including both total timeframe and seasonal coverage. If duration is not specified, enter 'N/A'."
+      irrigation_type:
+        type: string
+        description: "Please specify the type(s) of irrigation system studied (e.g., drip, pivot, sprinkler). If multiple systems were compared, list all types. If not specified, enter 'N/A'."
+      implementation_details:
+        type: string
+        description: "Please describe the specific automation technologies that contributed to energy savings, including details of pumps, controllers, and other relevant equipment. If implementation details are not provided, enter 'N/A'."
+
+  - id: reviewer1_comment3_rural_connectivity
+    claim: "Specific technical solutions enable reliable automated irrigation system operation in areas with poor internet connectivity"
+    exclusion_criteria:
+      urban_only:
+        type: boolean
+        description: "Study only examines systems in areas with reliable internet infrastructure"
+      no_connectivity_challenges:
+        type: boolean
+        description: "Study does not address connectivity challenges or solutions"
+    information_extraction:
+      connectivity_solution:
+        type: string
+        description: "Please describe in detail the technical solutions implemented to address poor internet connectivity, including communication technologies, protocols, and architectures used. If no specific solutions are described, enter 'N/A'."
+      reliability_metrics:
+        type: string
+        description: "Please extract all quantitative metrics demonstrating system reliability under poor connectivity, including uptime percentages, failure rates, and recovery times. If no metrics are reported, enter 'N/A'."
+      bandwidth_requirements:
+        type: string
+        description: "Please specify the minimum bandwidth requirements for system operation, including both normal and degraded mode requirements. If bandwidth requirements are not specified, enter 'N/A'."
+      offline_capabilities:
+        type: string
+        description: "Please describe all system capabilities maintained during internet outages, including edge computing and local control features. If offline operation is not discussed, enter 'N/A'."
+      implementation_cost:
+        type: float
+        description: "Please extract the per-hectare cost of implementing the connectivity solution in USD, including both hardware and setup costs. If costs are not reported, enter 'N/A'."
+
+  - id: reviewer1_comment4_pivot_technology
+    claim: "Modern center pivot irrigation systems integrate multiple advanced technologies beyond basic sprinkler capabilities"
+    exclusion_criteria:
+      basic_systems:
+        type: boolean
+        description: "Study only discusses basic pivot systems without advanced features"
+    information_extraction:
+      advanced_features:
+        type: list
+        description: "Please list all advanced technologies integrated into the pivot system, including GPS, variable rate application, corner arms, and other features. If no advanced features are described, enter 'N/A'."
+      control_capabilities:
+        type: string
+        description: "Please describe all precision control capabilities, including control granularity, automation features, and decision support tools. If control capabilities are not specified, enter 'N/A'."
+      performance_metrics:
+        type: string
+        description: "Please extract all quantitative improvements in water use efficiency, yield, or other metrics compared to basic pivot systems. Include specific measurements and methodology. If no comparative metrics are provided, enter 'N/A'."
+      integration_architecture:
+        type: string
+        description: "Please describe how various technologies are integrated, including system architecture, communication protocols, and control hierarchy. If integration details are not provided, enter 'N/A'."
+      cost_analysis:
+        type: float
+        description: "Please extract the per-hectare cost premium for advanced features compared to basic pivot systems in USD. Include breakdown by component if available. If costs are not reported, enter 'N/A'."
+
+  - id: reviewer1_comment5_flood_irrigation
+    claim: "Environmental regulations and documented impacts are driving systematic transition away from flood irrigation methods"
+    exclusion_criteria:
+      no_environmental_analysis:
+        type: boolean
+        description: "Study does not assess environmental impacts or regulatory aspects"
+    information_extraction:
+      environmental_impacts:
+        type: list
+        description: "Please list all quantified environmental impacts of flood irrigation, including effects on water tables, soil erosion, and nutrient leaching. If impacts are not quantified, enter 'N/A'."
+      regulatory_framework:
+        type: string
+        description: "Please describe specific regulations restricting flood irrigation use, including requirements, enforcement mechanisms, and implementation timelines. If regulatory aspects are not discussed, enter 'N/A'."
+      transition_costs:
+        type: float
+        description: "Please extract the per-hectare costs of converting from flood to more efficient irrigation methods in USD, including both direct and indirect costs. If costs are not reported, enter 'N/A'."
+      efficiency_gains:
+        type: float
+        description: "Please extract the percentage improvement in water use efficiency achieved by converting from flood to alternative methods. Include measurement methodology. If efficiency gains are not quantified, enter 'N/A'."
+      implementation_barriers:
+        type: list
+        description: "Please list all identified barriers preventing transition from flood irrigation, including technical, economic, and social factors. If barriers are not discussed, enter 'N/A'."
+
+  - id: reviewer1_comment6_financing
+    claim: "Government subsidies and financing programs effectively enable adoption of automated irrigation technologies"
+    exclusion_criteria:
+      no_financial_analysis:
+        type: boolean
+        description: "Study does not examine financing mechanisms or adoption impacts"
+    information_extraction:
+      subsidy_programs:
+        type: list
+        description: "Please list all government subsidy programs supporting irrigation technology adoption, including program details and eligibility criteria. If no specific programs are described, enter 'N/A'."
+      financing_mechanisms:
+        type: string
+        description: "Please describe available financing mechanisms, including loan terms, interest rates, and repayment structures. If financing details are not provided, enter 'N/A'."
+      adoption_impact:
+        type: string
+        description: "Please extract quantitative data showing the impact of financial support on technology adoption rates. If impact data is not provided, enter 'N/A'."
+      cost_coverage:
+        type: float
+        description: "Please extract the percentage of implementation costs covered by subsidies or favorable financing. If coverage rates are not specified, enter 'N/A'."
+      program_effectiveness:
+        type: string
+        description: "Please describe metrics demonstrating the effectiveness of financial support programs, including adoption rates, default rates, and economic impacts. If effectiveness metrics are not provided, enter 'N/A'."
+
+  - id: reviewer2_comment2_method_comparison
+    claim: "Specific irrigation automation methods demonstrate superior performance in deployment ease and maintenance requirements"
+    config:
+      num_papers_to_return: 4
+    exclusion_criteria:
+      no_comparison:
+        type: boolean
+        description: "Study does not compare different automation methods"
+    information_extraction:
+      methods_compared:
+        type: list
+        description: "Please list all irrigation automation methods compared in the study, including specific technologies and approaches. If methods are not compared, enter 'N/A'."
+      deployment_metrics:
+        type: string
+        description: "Please extract all metrics related to deployment ease, including installation time, required expertise, and setup complexity. If deployment metrics are not provided, enter 'N/A'."
+      maintenance_requirements:
+        type: string
+        description: "Please describe maintenance requirements for each method, including frequency, complexity, and required resources. If maintenance details are not specified, enter 'N/A'."
+      cost_comparison:
+        type: float
+        description: "Please extract the comparative costs per hectare in USD for different methods, including both installation and maintenance. If costs are not compared, enter 'N/A'."
+      performance_ranking:
+        type: string
+        description: "Please describe how different methods rank in terms of overall performance, including specific criteria used for comparison. If ranking is not provided, enter 'N/A'."
+
+  - id: reviewer2_comment3_iot_implementation
+    claim: "Field implementations of IoT-based irrigation systems achieve specific performance metrics in real-time operation"
+    config:
+      num_papers_to_return: 4
+    exclusion_criteria:
+      theoretical_only:
+        type: boolean
+        description: "Study presents only theoretical analysis without field implementation"
+      incomplete_metrics:
+        type: boolean
+        description: "Study lacks quantitative performance measurements"
+    information_extraction:
+      system_architecture:
+        type: string
+        description: "Please describe the complete IoT system architecture implemented, including all hardware and software components. If architecture details are not provided, enter 'N/A'."
+      real_time_performance:
+        type: string
+        description: "Please extract all metrics demonstrating real-time performance, including response times, update frequencies, and processing delays. If performance metrics are not reported, enter 'N/A'."
+      reliability_metrics:
+        type: string
+        description: "Please extract all reliability metrics, including uptime, failure rates, and recovery times. If reliability metrics are not provided, enter 'N/A'."
+      scalability_data:
+        type: string
+        description: "Please describe any evidence of system scalability, including tests with different deployment sizes or theoretical limits. If scalability is not discussed, enter 'N/A'."
+      implementation_challenges:
+        type: list
+        description: "Please list all challenges encountered during field implementation and how they were addressed. If challenges are not discussed, enter 'N/A'."
+
+  - id: reviewer3_comment1_case_studies
+    claim: "Long-term field studies validate the effectiveness of automated irrigation systems across diverse agricultural environments"
+    config:
+      num_papers_to_return: 5
+    exclusion_criteria:
+      short_duration:
+        type: boolean
+        description: "Study duration less than one complete growing season"
+      single_location:
+        type: boolean
+        description: "Study conducted at only one location or environment type"
+    information_extraction:
+      study_duration:
+        type: string
+        description: "Please specify the total duration of system operation and data collection, including number of growing seasons covered. If duration is not specified, enter 'N/A'."
+      environmental_conditions:
+        type: string
+        description: "Please describe all environmental conditions where the system was tested, including climate zones, soil types, and crop types. If conditions are not specified, enter 'N/A'."
+      water_efficiency:
+        type: float
+        description: "Please extract the percentage improvement in water use efficiency, including measurement methodology and baseline comparison. If efficiency is not quantified, enter 'N/A'."
+      yield_impact:
+        type: float
+        description: "Please extract the percentage change in crop yield, including statistical significance and comparison methodology. If yield impact is not measured, enter 'N/A'."
+      system_reliability:
+        type: string
+        description: "Please extract all reliability metrics, including uptime percentage, failure rates, and maintenance requirements. If reliability is not discussed, enter 'N/A'."
+      economic_analysis:
+        type: string
+        description: "Please provide the complete economic analysis including implementation costs, operational savings, and yield benefits in USD per hectare. If economic analysis is not included, enter 'N/A'."
+
+  - id: reviewer3_comment2_ml_adaptability
+    claim: "Machine learning models for irrigation control demonstrate successful adaptation across different crops and environmental conditions"
+    config:
+      num_papers_to_return: 4
+    exclusion_criteria:
+      single_application:
+        type: boolean
+        description: "Study examines only one crop type or environmental condition"
+      no_adaptation:
+        type: boolean
+        description: "Study does not discuss model adaptation or transfer"
+    information_extraction:
+      adaptation_methods:
+        type: string
+        description: "Please describe all techniques used to adapt ML models to new conditions, including transfer learning approaches and feature engineering methods. If adaptation methods are not discussed, enter 'N/A'."
+      performance_comparison:
+        type: string
+        description: "Please extract quantitative performance metrics comparing model effectiveness across different conditions, including statistical analysis. If performance comparison is not provided, enter 'N/A'."
+      data_requirements:
+        type: string
+        description: "Please specify all data required for model adaptation, including types, quantities, and collection methods. If data requirements are not discussed, enter 'N/A'."
+      computational_resources:
+        type: string
+        description: "Please describe computational resources required for model adaptation, including hardware specifications and processing times. If resource requirements are not specified, enter 'N/A'."
+      adaptation_limitations:
+        type: string
+        description: "Please describe all identified limitations or constraints in model adaptation, including scenarios where adaptation was less successful. If limitations are not discussed, enter 'N/A'."
+
+  - id: reviewer3_comment3_interoperability
+    claim: "Specific technical solutions enable interoperability between diverse irrigation system components"
+    exclusion_criteria:
+      single_vendor:
+        type: boolean
+        description: "Study only examines single-vendor solutions"
+    information_extraction:
+      standards_used:
+        type: list
+        description: "Please list all interoperability standards and protocols implemented, including version numbers and specific features used. If standards are not specified, enter 'N/A'."
+      integration_methods:
+        type: string
+        description: "Please describe methods used to achieve integration between different components, including specific APIs and data formats. If integration methods are not detailed, enter 'N/A'."
+      performance_impact:
+        type: string
+        description: "Please extract any metrics showing the impact of interoperability features on system performance. If performance impact is not measured, enter 'N/A'."
+      implementation_challenges:
+        type: list
+        description: "Please list all challenges encountered in achieving interoperability and how they were addressed. If challenges are not discussed, enter 'N/A'."
+      cost_implications:
+        type: float
+        description: "Please extract any costs specifically associated with implementing interoperability features in USD. If costs are not specified, enter 'N/A'."
+
+  - id: reviewer3_comment4_security
+    claim: "Comprehensive security frameworks effectively protect automated irrigation systems against cyber threats"
+    config:
+      num_papers_to_return: 4
+    exclusion_criteria:
+      theoretical_only:
+        type: boolean
+        description: "Study presents only theoretical security analysis without implementation"
+    information_extraction:
+      threat_model:
+        type: string
+        description: "Please describe the complete threat model developed for irrigation systems, including all identified threats and attack vectors. If threat model is not provided, enter 'N/A'."
+      security_measures:
+        type: list
+        description: "Please list all implemented security measures, including both technical controls and procedural safeguards. If security measures are not specified, enter 'N/A'."
+      effectiveness_metrics:
+        type: string
+        description: "Please extract all metrics demonstrating security measure effectiveness, including penetration testing results and security assessments. If effectiveness is not measured, enter 'N/A'."
+      implementation_cost:
+        type: float
+        description: "Please extract the per-hectare cost of implementing the security framework in USD, including breakdown by component. If costs are not reported, enter 'N/A'."
+      incident_response:
+        type: string
+        description: "Please describe all procedures established for detecting and responding to security incidents, including recovery plans. If incident response is not discussed, enter 'N/A'."
+
+  - id: reviewer3_comment5_preprocessing
+    claim: "Specific data preprocessing techniques improve the reliability and accuracy of agricultural sensor data"
+    exclusion_criteria:
+      no_evaluation:
+        type: boolean
+        description: "Study does not evaluate preprocessing effectiveness"
+    information_extraction:
+      techniques:
+        type: list
+        description: "Please list all preprocessing techniques applied to agricultural sensor data, including specific algorithms and methods. If techniques are not specified, enter 'N/A'."
+      performance_impact:
+        type: string
+        description: "Please extract all metrics showing how preprocessing improves data quality or system performance, including comparative analysis. If impact is not measured, enter 'N/A'."
+      computational_requirements:
+        type: string
+        description: "Please specify computational resources required for preprocessing, including processing times and hardware requirements. If requirements are not specified, enter 'N/A'."
+      implementation_details:
+        type: string
+        description: "Please describe how preprocessing techniques are implemented in practice, including integration with sensor networks. If implementation details are not provided, enter 'N/A'."
+      limitations:
+        type: string
+        description: "Please describe all identified limitations or tradeoffs of different preprocessing approaches. If limitations are not discussed, enter 'N/A'."
+
+  - id: reviewer3_comment6_cost_benefit
+    claim: "Cost-benefit analyses demonstrate economic viability of automated irrigation systems across different scales of operation"
+    config:
+      num_papers_to_return: 4
+    exclusion_criteria:
+      incomplete_analysis:
+        type: boolean
+        description: "Study lacks comprehensive economic analysis"
+    information_extraction:
+      implementation_costs:
+        type: float
+        description: "Please extract all implementation costs in USD per hectare, broken down by component and farm size. If costs are not specified, enter 'N/A'."
+      operational_savings:
+        type: float
+        description: "Please extract annual operational cost savings in USD per hectare, including water, energy, and labor savings. If savings are not quantified, enter 'N/A'."
+      yield_benefits:
+        type: float
+        description: "Please extract the economic value of yield improvements in USD per hectare. If yield benefits are not quantified, enter 'N/A'."
+      roi_analysis:
+        type: string
+        description: "Please provide complete return on investment analysis, including payback period and long-term profitability projections. If ROI analysis is not included, enter 'N/A'."
+      scale_effects:
+        type: string
+        description: "Please describe how economic viability varies with operation scale, including specific breakeven points. If scale effects are not analyzed, enter 'N/A'."
+
+  - id: reviewer3_comment7_processing_bottlenecks
+    claim: "Edge and cloud computing architectures in agricultural IoT systems successfully address specific data processing bottlenecks"
+    exclusion_criteria:
+      no_performance_analysis:
+        type: boolean
+        description: "Study does not analyze processing performance or bottlenecks"
+    information_extraction:
+      bottleneck_identification:
+        type: list
+        description: "Please list all identified data processing bottlenecks in agricultural IoT systems, including specific causes and impacts. If bottlenecks are not identified, enter 'N/A'."
+      solution_architecture:
+        type: string
+        description: "Please describe architectural solutions implemented to address bottlenecks, including edge and cloud computing strategies. If solutions are not described, enter 'N/A'."
+      performance_improvement:
+        type: string
+        description: "Please extract quantitative metrics showing performance improvements achieved by implemented solutions. If improvements are not measured, enter 'N/A'."
+      resource_requirements:
+        type: string
+        description: "Please specify computational and network resources required for implemented solutions. If requirements are not specified, enter 'N/A'."
+      scalability_analysis:
+        type: string
+        description: "Please describe how solutions scale with increasing system size or data volume. If scalability is not analyzed, enter 'N/A'."
+
+  - id: reviewer3_comment8_irrigation_comparison
+    claim: "Different irrigation methods demonstrate varying degrees of automation potential and implementation success"
+    config:
+      num_papers_to_return: 4
+    exclusion_criteria:
+      single_method:
+        type: boolean
+        description: "Study examines only one irrigation method"
+    information_extraction:
+      methods_compared:
+        type: list
+        description: "Please list all irrigation methods compared, including specific technologies and configurations. If methods are not compared, enter 'N/A'."
+      automation_potential:
+        type: string
+        description: "Please describe the automation potential for each method, including technical feasibility and limitations. If potential is not assessed, enter 'N/A'."
+      implementation_success:
+        type: string
+        description: "Please extract metrics showing implementation success rates and challenges for each method. If success rates are not reported, enter 'N/A'."
+      cost_comparison:
+        type: float
+        description: "Please extract comparative implementation and operation costs in USD per hectare for each method. If costs are not compared, enter 'N/A'."
+      performance_metrics:
+        type: string
+        description: "Please extract quantitative performance metrics for each method, including water efficiency and yield impacts. If metrics are not provided, enter 'N/A'."
+
+  - id: reviewer3_comment9_decision_support
+    claim: "Decision support systems in automated irrigation demonstrate specific operational benefits and implementation requirements"
+    config:
+      num_papers_to_return: 4
+    exclusion_criteria:
+      theoretical_only:
+        type: boolean
+        description: "Study presents only theoretical analysis without implementation"
+    information_extraction:
+      system_architecture:
+        type: string
+        description: "Please describe the complete architecture of implemented decision support systems, including all components and interfaces. If architecture is not detailed, enter 'N/A'."
+      decision_criteria:
+        type: list
+        description: "Please list all criteria and parameters used in irrigation decision-making. If criteria are not specified, enter 'N/A'."
+      performance_metrics:
+        type: string
+        description: "Please extract quantitative metrics showing system effectiveness in irrigation management. If metrics are not provided, enter 'N/A'."
+      user_interface:
+        type: string
+        description: "Please describe the user interface design and features for operator interaction. If interface is not described, enter 'N/A'."
+      implementation_requirements:
+        type: string
+        description: "Please specify all technical and operational requirements for system implementation. If requirements are not detailed, enter 'N/A'."

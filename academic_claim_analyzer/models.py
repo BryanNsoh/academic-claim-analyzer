@@ -58,10 +58,10 @@ class Paper(BaseModel, FlexibleNumericField):
 
 class RankedPaper(Paper):
     relevance_score: Optional[float] = None
+    analysis: Optional[str] = None
     relevant_quotes: List[str] = Field(default_factory=list)
-    analysis: str = ""
-    exclusion_criteria_result: Dict[str, Any] = Field(default_factory=dict)
-    extraction_result: Dict[str, Any] = Field(default_factory=dict)
+    extraction_result: Optional[Dict[str, Any]] = None
+    exclusion_criteria_result: Optional[Dict[str, bool]] = None
 
     @field_validator('relevance_score')
     def validate_score(cls, v):
@@ -129,9 +129,18 @@ class ClaimAnalysis(BaseModel):
                     'relevance_score': p.relevance_score,
                     'analysis': p.analysis,
                     'relevant_quotes': p.relevant_quotes,
-                    'extraction_result': p.extraction_result,
-                    'exclusion_criteria_result': p.exclusion_criteria_result,
-                    'metadata': p.metadata
+                    'extraction_result': {
+                        field: {
+                            'value': value,
+                            'description': self.data_extraction_schema.model_fields[field].description
+                        } for field, value in p.extraction_result.items()
+                    } if p.extraction_result else None,
+                    'exclusion_criteria_result': {
+                        field: {
+                            'value': value,
+                            'description': self.exclusion_schema.model_fields[field].description
+                        } for field, value in p.exclusion_criteria_result.items()
+                    } if p.exclusion_criteria_result else None,
                 }
                 for p in self.get_top_papers(5)
             ],

@@ -159,7 +159,7 @@ async def formulate_queries(claim: str, num_queries: int, query_type: str) -> Li
 
     response = await handler.process(
         prompts=prompt,  # Single prompt, not list
-        model="gpt-4o-mini",
+        model="gpt-4o",
         mode="regular",  # Changed from async_batch
         response_format=QueryResponse
     )

@@ -104,6 +104,9 @@ async def process_claims(claims_data: List[Dict[str, Any]], config: BatchProcess
     """Process a list of claims using the provided configuration."""
     results = {}
     
+    #print full claim data object's contents to console
+    logger.info(f"Full claim data object: {claims_data}")
+    
     for claim_data in claims_data:
         claim_text = claim_data.get('claim')
         if not claim_text:
@@ -134,38 +137,60 @@ async def process_claims(claims_data: List[Dict[str, Any]], config: BatchProcess
 def extract_concise_results(results: Dict[str, Any], num_papers: int = 5) -> Dict[str, Any]:
     """Extract concise results from analysis."""
     concise_results = {}
+    
     for claim, analysis in results.items():
+        # Debug logging
+        logger.debug(f"Processing claim: {claim}")
+        logger.debug(f"Analysis type: {type(analysis)}")
+        logger.debug(f"Analysis content: {analysis}")
+        
+        # Get ranked papers (handle both ClaimAnalysis objects and dicts)
         if isinstance(analysis, ClaimAnalysis):
-            # Get top papers directly from ClaimAnalysis object
             ranked_papers = analysis.get_top_papers(num_papers)
-            concise_papers = []
+        else:
+            ranked_papers = analysis.get('ranked_papers', [])
             
-            for paper in ranked_papers:
-                concise_paper = {
-                    'title': paper.title,
-                    'authors': paper.authors,
-                    'year': paper.year,
-                    'bibtex': paper.bibtex,
-                    'relevant_quotes': paper.relevant_quotes[:3],
-                    'analysis': paper.analysis,
-                    'extraction_result': paper.extraction_result,
-                    'exclusion_criteria_result': paper.exclusion_criteria_result
-                }
-                concise_papers.append(concise_paper)
+        concise_papers = []
+        
+        for paper in ranked_papers:
+            # Debug logging
+            logger.debug(f"Processing paper: {paper.title if hasattr(paper, 'title') else paper.get('title')}")
             
-            concise_results[claim] = {
-                'ranked_papers': concise_papers,
-                'num_total_papers': len(analysis.ranked_papers)
+            paper_dict = {
+                'title': getattr(paper, 'title', paper.get('title', 'Unknown')),
+                'authors': getattr(paper, 'authors', paper.get('authors', [])),
+                'year': getattr(paper, 'year', paper.get('year')),
+                'score': getattr(paper, 'relevance_score', paper.get('relevance_score')),
+                'extraction_result': getattr(paper, 'extraction_result', paper.get('extraction_result', {})),
+                'exclusion_criteria_result': getattr(paper, 'exclusion_criteria_result', paper.get('exclusion_criteria_result', {})),
+                'analysis': getattr(paper, 'analysis', paper.get('analysis', '')),
+                'relevant_quotes': getattr(paper, 'relevant_quotes', paper.get('relevant_quotes', []))[:3]
             }
             
-            # Debug logging
-            logger.debug(f"Processed claim: {claim}")
-            logger.debug(f"Number of ranked papers: {len(ranked_papers)}")
-            logger.debug(f"First paper extraction result: {ranked_papers[0].extraction_result if ranked_papers else 'No papers'}")
+            # Add selection criteria and extraction results side by side
+            if paper_dict['extraction_result']:
+                paper_dict['metrics'] = {
+                    'dataset_size': paper_dict['extraction_result'].get('dataset_size', -1),
+                    'accuracy': paper_dict['extraction_result'].get('accuracy', 'N/A'),
+                    'methods_compared': paper_dict['extraction_result'].get('methods', 'N/A'),
+                    'hardware': paper_dict['extraction_result'].get('hardware_specs', 'N/A')
+                }
             
-        else:
-            logger.error(f"Invalid analysis object type: {type(analysis)}")
+            if paper_dict['exclusion_criteria_result']:
+                paper_dict['criteria'] = {
+                    'no_comparison': paper_dict['exclusion_criteria_result'].get('no_comparison', False),
+                    'small_dataset': paper_dict['exclusion_criteria_result'].get('small_dataset', False)
+                }
             
+            concise_papers.append(paper_dict)
+            
+        concise_results[claim] = {
+            'claim': claim,
+            'papers': concise_papers,
+            'num_total_papers': len(ranked_papers),
+            'timestamp': analysis.timestamp if isinstance(analysis, ClaimAnalysis) else datetime.now().isoformat()
+        }
+        
     return concise_results
 
 def sanitize_filename(name: str) -> str:

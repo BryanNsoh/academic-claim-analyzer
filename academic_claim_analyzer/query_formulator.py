@@ -1,8 +1,12 @@
 # academic_claim_analyzer/query_formulator.py
 
 from typing import List
+import logging
 from pydantic import BaseModel, Field
-from .llm_api_handler import LLMAPIHandler
+
+from .paper_ranker import llm_handler, get_model_or_default, DEFAULT_LLM_MODEL
+
+logger = logging.getLogger(__name__)
 
 SCOPUS_SEARCH_GUIDE = """
 Syntax and Operators
@@ -11,16 +15,18 @@ Valid syntax for advanced search queries includes:
 
 Field codes (e.g. TITLE, ABS, KEY, AUTH, AFFIL) to restrict searches to specific parts of documents
 Boolean operators (AND, OR, AND NOT) to combine search terms
-Proximity operators (W/n, PRE/n) to find words within a specified distance - W/n: Finds terms within "n" words of each other, regardless of order. Example: journal W/15 publishing finds articles where "journal" and "publishing" are within two words of each other. - PRE/n: Finds terms in the specified order and within "n" words of each other. Example: data PRE/50 analysis finds articles where "data" appears before "analysis" within three words. - To find terms in the same sentence, use 15. To find terms in the same paragraph, use 50 -
+Proximity operators (W/n, PRE/n) to find words within a specified distance - W/n: Finds terms within \"n\" words of each other, regardless of order. Example: journal W/15 publishing finds articles where \"journal\" and \"publishing\" are within two words of each other. - PRE/n: Finds terms in the specified order and within \"n\" words of each other. Example: data PRE/50 analysis finds articles where \"data\" appears before \"analysis\" within three words. - To find terms in the same sentence, use 15. To find terms in the same paragraph, use 50 -
 Quotation marks for loose/approximate phrase searches
 Braces {} for exact phrase searches
 Wildcards (*) to capture variations of search terms
+
 Invalid syntax includes:
 
 Mixing different proximity operators (e.g. W/n and PRE/n) in the same expression
 Using wildcards or proximity operators with exact phrase searches
 Placing AND NOT before other Boolean operators
 Using wildcards on their own without any search terms
+
 Ideal Search Structure
 
 An ideal advanced search query should:
@@ -33,24 +39,19 @@ Include wildcards to capture variations of key terms (while avoiding mixing them
 Follow the proper order of precedence for operators
 Complex searches should be built up systematically, with parentheses to group related expressions as needed. The information from the provided documents on syntax rules and operators should be applied rigorously.
 
-** Critical: all double quotes other than the outermost ones should be preceded by a backslash (") to escape them in the JSON format. Failure to do so will result in an error when parsing the JSON string. **
+** Critical: all double quotes other than the outermost ones should be preceded by a backslash (\\") to escape them in the JSON format. Failure to do so will result in an error when parsing the JSON string. **
 
 Example Advanced Searches
 
 {
   "queries": [
-    "TITLE-ABS-KEY((\"precision agriculture\" OR \"precision farming\") AND (\"machine learning\" OR \"AI\") AND \"water\")",
-    "TITLE-ABS-KEY((iot OR \"internet of things\") AND (irrigation OR watering) AND sensor*)",
-    "TITLE-ABS-Key((\"precision farming\" OR \"precision agriculture\") AND (\"deep learning\" OR \"neural networks\") AND \"water\")",
-    "TITLE-ABS-KEY((crop W/5 monitor*) AND \"remote sensing\" AND (irrigation OR water*))",
-    "TITLE(\"precision irrigation\" OR \"variable rate irrigation\" AND \"machine learning\")"
+    "TITLE-ABS-KEY((\\\"precision agriculture\\\" OR \\\"precision farming\\\") AND (\\\"machine learning\\\" OR \\\"AI\\\") AND \\\"water\\\")",
+    "TITLE-ABS-KEY((iot OR \\\"internet of things\\\") AND (irrigation OR watering) AND sensor*)",
+    "TITLE-ABS-Key((\\\"precision farming\\\" OR \\\"precision agriculture\\\") AND (\\\"deep learning\\\" OR \\\"neural networks\\\") AND \\\"water\\\")",
+    "TITLE-ABS-KEY((crop W/5 monitor*) AND \\\"remote sensing\\\" AND (irrigation OR water*))",
+    "TITLE(\\\"precision irrigation\\\" OR \\\"variable rate irrigation\\\" AND \\\"machine learning\\\")"
   ]
 }
-
-
-** Critical: all double quotes other than the outermost ones should be preceded by a backslash (") to escape them in the JSON format. Failure to do so will result in an error when parsing the JSON string. **. 
-
-These example searches demonstrate different ways to effectively combine key concepts related to precision agriculture, irrigation, real-time monitoring, IoT, machine learning and related topics using advanced search operators. They make use of field codes, Boolean and proximity operators, phrase searching, and wildcards to construct targeted, comprehensive searches to surface the most relevant research. The topic focus is achieved through carefully chosen search terms covering the desired themes.
 """
 
 OPENALEX_SEARCH_GUIDE = """
@@ -62,7 +63,7 @@ Employing the OR operator in all caps to find pages containing either term
 Using the site%3A operator to limit results to a specific website
 Applying the filetype%3A operator to find specific file formats like PDF, DOC, etc.
 Adding the * wildcard as a placeholder for unknown words
-`
+
 Invalid syntax includes:
 Putting a plus sign + before words (alex stopped supporting this)
 Using other special characters like %3F, %24, %26, %23, etc. within search terms
@@ -76,6 +77,7 @@ Utilize exact phrases in %22quotes%22 for specific word combinations
 Exclude irrelevant terms using the - minus sign
 Connect related terms or synonyms with OR
 Apply the * wildcard strategically for flexibility
+
 Note:
 
 By following these guidelines and using proper URL encoding, you can construct effective and accurate search queries for alex.
@@ -92,8 +94,6 @@ Example Searches
     "https://api.openalex.org/works?search=%22wireless+sensor+networks%22+%2B%22precision+agriculture%22+%2B%22variable+rate+irrigation%22+%2B%22irrigation+automation%22&sort=relevance_score:desc&per-page=30"
   ]
 }
-
-These example searches demonstrate how to create targeted, effective alex searches. They focus on specific topics, exclude irrelevant results, allow synonym flexibility, and limit to relevant domains when needed. The search terms are carefully selected to balance relevance and specificity while avoiding being overly restrictive.  By combining relevant keywords, exact phrases, and operators, these searches help generate high-quality results for the given topics.
 """
 
 GENERATE_QUERIES = """
@@ -130,19 +130,18 @@ Replace query_1, query_2, etc. with your actual search queries. The number of qu
 
 5. If the search guidance specifies a particular platform (e.g., Scopus, Web of Science), ensure your queries are formatted appropriately for that platform.
 
-6. Important: If your queries contain quotation marks, ensure they are properly escaped with a backslash (\") to maintain valid list formatting.
+6. Important: If your queries contain quotation marks, ensure they are properly escaped with a backslash (\\") to maintain valid list formatting.
 
 Generate the list of search queries now, following the instructions above.
 """
 
-
 class QueryResponse(BaseModel):
-    queries: List[str] = Field(description="List of generated search queries")
-
+    queries: List[str] = Field(..., description="List of generated search queries")
 
 async def formulate_queries(claim: str, num_queries: int, query_type: str) -> List[str]:
-    handler = LLMAPIHandler()
-
+    """
+    Generate advanced search queries for the given claim and platform.
+    """
     if query_type.lower() == 'scopus':
         search_guidance = SCOPUS_SEARCH_GUIDE
     elif query_type.lower() == 'openalex':
@@ -150,18 +149,17 @@ async def formulate_queries(claim: str, num_queries: int, query_type: str) -> Li
     else:
         raise ValueError(f"Unsupported query type: {query_type}")
 
-    prompt = GENERATE_QUERIES.format(
-        CLAIM=claim,
-        SEARCH_GUIDANCE=search_guidance,
-        NUM_QUERIES=num_queries,
-        QUERY_TYPE=query_type
-    )
+    prompt = GENERATE_QUERIES.replace("<CLAIM>", "").replace("</claim>", "").replace("<search_guidance>", "").replace("</search_guidance>", "")
+    prompt = prompt.format(CLAIM=claim, SEARCH_GUIDANCE=search_guidance, NUM_QUERIES=num_queries)
 
-    response = await handler.process(
-        prompts=prompt,  # Single prompt, not list
-        model="gpt-4o",
-        mode="regular",  # Changed from async_batch
-        response_format=QueryResponse
+    result = await llm_handler.process(
+        prompts=prompt,
+        model=get_model_or_default(None),
+        response_type=QueryResponse
     )
     
-    return response.queries  # Direct access to queries
+    if not result.success:
+        logger.error(f"Failed to formulate queries: {result.error}")
+        return []
+
+    return result.data.queries

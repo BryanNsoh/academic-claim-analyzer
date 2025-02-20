@@ -1,0 +1,88 @@
+{
+  "Machine learning improves crop yield predictions": {
+    "claim": "Machine learning improves crop yield predictions",
+    "timestamp": "2025-02-20T18:50:25.348812",
+    "parameters": {
+      "num_queries": 3,
+      "papers_per_query": 5,
+      "num_papers_to_return": 2
+    },
+    "queries": [
+      {
+        "query": "https://api.openalex.org/works?search=%22machine+learning%22+%22crop+yield+prediction%22&sort=relevance_score:desc&per-page=30",
+        "source": "openalex",
+        "timestamp": "2025-02-20 18:50:29.495723"
+      },
+      {
+        "query": "https://api.openalex.org/works?search=%22artificial+intelligence%22+%22agricultural+yield%22+OR+%22crop+production%22&sort=relevance_score:desc&per-page=30",
+        "source": "openalex",
+        "timestamp": "2025-02-20 18:50:29.495723"
+      },
+      {
+        "query": "https://api.openalex.org/works?search=%22machine+learning%22+%22yield+forecasting%22+-%22livestock%22&sort=relevance_score:desc&per-page=30",
+        "source": "openalex",
+        "timestamp": "2025-02-20 18:50:29.495723"
+      },
+      {
+        "query": "TITLE-ABS-KEY((\"machine learning\" OR \"deep learning\" OR \"neural network*\") AND \"crop yield prediction*\")",
+        "source": "scopus",
+        "timestamp": "2025-02-20 18:50:29.495723"
+      },
+      {
+        "query": "TITLE-ABS-KEY((\"machine learning\" OR \"AI\") AND (agriculture OR \"crop*\") AND (\"yield forecast*\" OR \"yield estimat*\"))",
+        "source": "scopus",
+        "timestamp": "2025-02-20 18:50:29.495723"
+      },
+      {
+        "query": "TITLE-ABS-KEY((\"crop model*\" OR \"agricultural model*\") AND (\"machine learning\" OR \"data mining\") AND \"yield prediction*\")",
+        "source": "scopus",
+        "timestamp": "2025-02-20 18:50:29.495723"
+      }
+    ],
+    "ranked_papers": [
+      {
+        "title": "Crop yield prediction using machine learning: A systematic literature review",
+        "authors": [
+          "Thomas van Klompenburg",
+          "Ayalew Kassahun",
+          "Cagatay Catal"
+        ],
+        "year": 2020,
+        "relevance_score": 0.8999999999999999,
+        "analysis": "This paper is directly relevant to the claim that machine learning improves crop yield predictions. It is a systematic literature review focusing on the application of machine learning (ML) and deep learning techniques for crop yield prediction. The methodology involves synthesizing existing research papers on ML-based crop yield prediction. The evidence quality is high, given that it's a systematic review summarizing findings from 50 ML-based papers and 30 deep learning-based papers. Limitations aren't explicitly stated in the excerpt, but systematic reviews are limited by the scope of papers included and the potential for bias in study selection and interpretation. The paper provides evidence supporting the claim by highlighting the widespread use of machine learning algorithms like Neural Networks and CNNs in crop yield prediction.",
+        "relevant_quotes": [
+          "Machine learning (ML)-based crop yield prediction papers have been synthesized.",
+          "We selected 50 ML-based papers and later, 30 deep learning-based papers.",
+          "The most widely used ML algorithm is Neural Networks."
+        ],
+        "extraction_result": null,
+        "exclusion_criteria_result": null
+      },
+      {
+        "title": "Machine learning for regional crop yield forecasting in Europe",
+        "authors": [
+          "Dilli Paudel",
+          "Hendrik Boogaard",
+          "Allard de Wit",
+          "Marijn van der Velde",
+          "Martin Claverie",
+          "Luigi Nisini",
+          "Sander Janssen",
+          "Sjoukje Osinga",
+          "Ioannis N. Athanasiadis"
+        ],
+        "year": 2021,
+        "relevance_score": 0.8541666666666666,
+        "analysis": "The paper \"Machine learning for regional crop yield forecasting in Europe\" is directly relevant to the claim that machine learning improves crop yield predictions. The study uses machine learning to forecast crop yields at multiple spatial levels across Europe, evaluating its performance on 35 case studies encompassing nine countries and six crops. The methodology involves applying machine learning techniques to regional crop yield forecasting. The evidence quality is strong, as the study compares machine learning forecasts to trend forecasts, demonstrating that the former has lower errors and uncertainty. A limitation is that the forecasts captured spatial patterns well for average harvests but not extreme harvests. Overall, the paper provides empirical evidence supporting the claim that machine learning can enhance crop yield predictions, particularly at the regional level.",
+        "relevant_quotes": [
+          "Crop yield forecasts for multiple spatial levels using machine learning.",
+          "Evaluated machine learning on 35 case studies covering nine countries and six crops.",
+          "Regional forecasts had lower errors and uncertainty than trend forecasts."
+        ],
+        "extraction_result": null,
+        "exclusion_criteria_result": null
+      }
+    ],
+    "metadata": {}
+  }
+}

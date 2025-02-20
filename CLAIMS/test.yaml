@@ -9,6 +9,8 @@ config:
     platforms:
       - openalex
       - scopus
+      - core
+      - arxiv
     min_year: 2010
     max_year: 2024
 

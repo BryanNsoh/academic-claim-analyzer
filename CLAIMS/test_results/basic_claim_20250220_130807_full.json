@@ -1,0 +1,85 @@
+{
+  "Machine learning improves crop yield predictions": {
+    "claim": "Machine learning improves crop yield predictions",
+    "timestamp": "2025-02-20T19:00:02.533861",
+    "parameters": {
+      "num_queries": 3,
+      "papers_per_query": 5,
+      "num_papers_to_return": 2
+    },
+    "queries": [
+      {
+        "query": "https://api.openalex.org/works?search=%22machine+learning%22+%22crop+yield+prediction%22&sort=relevance_score:desc&per-page=30",
+        "source": "openalex",
+        "timestamp": "2025-02-20 19:00:07.374584"
+      },
+      {
+        "query": "https://api.openalex.org/works?search=%22artificial+intelligence%22+%22crop+yield+forecasting%22&sort=relevance_score:desc&per-page=30",
+        "source": "openalex",
+        "timestamp": "2025-02-20 19:00:07.374584"
+      },
+      {
+        "query": "https://api.openalex.org/works?search=%22machine+learning%22+%22agricultural+yield%22+-%22livestock%22&sort=relevance_score:desc&per-page=30",
+        "source": "openalex",
+        "timestamp": "2025-02-20 19:00:07.374584"
+      },
+      {
+        "query": "TITLE-ABS-KEY((\\\"machine learning\\\" OR \\\"deep learning\\\" OR \\\"neural network*\\\") AND (crop OR agriculture OR farming) AND (yield PRE/5 predict* OR yield PRE/5 forecast*))",
+        "source": "scopus",
+        "timestamp": "2025-02-20 19:00:07.374584"
+      },
+      {
+        "query": "TITLE-ABS-KEY((\\\"machine learning\\\" OR \\\"artificial intelligence\\\") AND (\\\"crop yield prediction\\\" OR \\\"agricultural forecasting\\\") AND (improv* OR enhanc* OR optimi*))",
+        "source": "scopus",
+        "timestamp": "2025-02-20 19:00:07.374584"
+      },
+      {
+        "query": "TITLE-ABS-KEY((crop OR agriculture OR farming) AND (yield PRE/5 predict* OR yield PRE/5 forecast*) AND (\\\"machine learning model*\\\" OR \\\"AI algorithm*\\\") AND evaluat*)",
+        "source": "scopus",
+        "timestamp": "2025-02-20 19:00:07.374584"
+      }
+    ],
+    "ranked_papers": [
+      {
+        "title": "Machine learning approaches for crop yield prediction and nitrogen status estimation in precision agriculture: A review",
+        "authors": [
+          "Anna Chlingaryan",
+          "Salah Sukkarieh",
+          "Brett M. Whelan"
+        ],
+        "year": 2018,
+        "relevance_score": 0.8999999999999999,
+        "analysis": "The paper is directly relevant as it reviews machine learning approaches for crop yield prediction. The methodology involves reviewing existing studies that use machine learning techniques for crop yield prediction and nitrogen status estimation. The evidence quality depends on the quality of the reviewed studies, which is not explicitly evaluated in this excerpt. Limitations are not detailed in this excerpt, but the review format provides an overview rather than in-depth analysis of individual methods. The direct relevance is high as it directly addresses the application of machine learning to improve crop yield predictions.",
+        "relevant_quotes": [
+          "Review of studies in crop yield prediction and N status estimation via ML techniques.",
+          "Comparison of different ML techniques in application to the same task in PA.",
+          "Discussion on ML techniques used in the reviewed studies."
+        ],
+        "extraction_result": null,
+        "exclusion_criteria_result": null
+      },
+      {
+        "title": "Coupling Machine Learning and Crop Modeling Improves Crop Yield\n  Prediction in the US Corn Belt",
+        "authors": [
+          "Archontoulis, Sotirios",
+          "Hu, Guiping",
+          "Hu, Guiping",
+          "Huber, Isaiah",
+          "Shahhosseini, Mohsen",
+          "Shahhosseini, Mohsen"
+        ],
+        "year": 2020,
+        "relevance_score": 0.85,
+        "analysis": "The paper directly investigates whether coupling crop modeling and machine learning improves corn yield predictions in the US Corn Belt. The methodology involves comparing the performance of hybrid crop modeling and machine learning approaches. The evidence appears strong, with a quantitative analysis of prediction accuracy. Limitations are not explicitly stated in the excerpt, but the study focuses solely on the US Corn Belt, which may limit the generalizability of the findings. The paper is directly relevant to the claim.",
+        "relevant_quotes": [
+          "This study investigates whether coupling crop modeling and machine learning (ML) improves corn yield predictions in the US Corn Belt.",
+          "The main objectives are to explore whether a hybrid approach (crop modeling + ML) would result in better predictions, investigate which combinations of hybrid models provide the most accurate predictions, and determine the features from the crop modeling that are most effective to be integrated with ML for corn yield prediction.",
+          "Coupling machine learning and crop modeling improves crop yield prediction in the US Corn Belt"
+        ],
+        "extraction_result": null,
+        "exclusion_criteria_result": null
+      }
+    ],
+    "metadata": {}
+  }
+}

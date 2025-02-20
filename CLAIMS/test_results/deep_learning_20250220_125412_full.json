@@ -1,0 +1,109 @@
+{
+  "Deep learning outperforms traditional methods in crop disease detection": {
+    "claim": "Deep learning outperforms traditional methods in crop disease detection",
+    "timestamp": "2025-02-20T18:52:03.334244",
+    "parameters": {
+      "num_queries": 3,
+      "papers_per_query": 5,
+      "num_papers_to_return": 2
+    },
+    "queries": [
+      {
+        "query": "https://api.openalex.org/works?search=%22deep+learning%22+%2B%22crop+disease+detection%22+%2B%22outperforms%22+%2B%22traditional+methods%22&sort=relevance_score:desc&per-page=30",
+        "source": "openalex",
+        "timestamp": "2025-02-20 18:52:08.048710"
+      },
+      {
+        "query": "https://api.openalex.org/works?search=%22deep+learning%22+%2B%22crop+disease+detection%22+%2B%22accuracy%22+OR+%22performance%22+OR+%22efficiency%22&sort=relevance_score:desc&per-page=30",
+        "source": "openalex",
+        "timestamp": "2025-02-20 18:52:08.048710"
+      },
+      {
+        "query": "https://api.openalex.org/works?search=%22convolutional+neural+networks%22+OR+%22CNN%22+%2B%22crop+disease+classification%22+%2B%22image+recognition%22&sort=relevance_score:desc&per-page=30",
+        "source": "openalex",
+        "timestamp": "2025-02-20 18:52:08.048710"
+      },
+      {
+        "query": "TITLE-ABS-KEY((\\\"deep learning\\\" OR \\\"convolutional neural networks\\\" OR \\\"recurrent neural networks\\\") AND (crop OR plant) AND (disease OR pest) AND (detection OR classification) AND NOT (traditional OR \\\"support vector machine\\\" OR SVM))",
+        "source": "scopus",
+        "timestamp": "2025-02-20 18:52:08.048710"
+      },
+      {
+        "query": "TITLE-ABS-KEY((\\\"crop disease\\\" OR \\\"plant disease\\\") AND (detection OR diagnosis) AND (\\\"deep learning\\\" OR \\\"artificial intelligence\\\" OR \\\"machine learning\\\") AND (image OR visual) AND (performance OR accuracy) AND NOT (traditional OR \\\"expert system\\\"))",
+        "source": "scopus",
+        "timestamp": "2025-02-20 18:52:08.048710"
+      },
+      {
+        "query": "TITLE-ABS-KEY((crop OR plant) AND (disease OR pest) AND (\\\"detection\\\" OR \\\"identification\\\") AND (\\\"deep learning\\\" OR CNN OR \\\"convolutional neural network\\\") AND (\\\"transfer learning\\\" OR \\\"data augmentation\\\") AND (performance OR comparison))",
+        "source": "scopus",
+        "timestamp": "2025-02-20 18:52:08.048710"
+      }
+    ],
+    "ranked_papers": [
+      {
+        "title": "Crop Disease Detection Using Deep Learning",
+        "authors": [
+          "Omkar Kulkarni"
+        ],
+        "year": 2018,
+        "relevance_score": 0.9,
+        "analysis": "The paper \"Crop Disease Detection Using Deep Learning\" is directly relevant to the claim that deep learning outperforms traditional methods in crop disease detection. The paper's title itself indicates its focus. The excerpt introduces the importance of agriculture and the threat posed by crop diseases, setting the stage for the application of deep learning to address this problem. The methodology, results, and conclusion sections (mentioned in the document structure) would provide evidence regarding the performance of deep learning methods. However, the excerpt provided is limited, so a full evaluation of the evidence quality and limitations isn't possible. A complete paper is needed to assess the specific deep learning architectures used, the datasets employed, the evaluation metrics, and any comparisons made against traditional methods. Based on the current excerpt, the direct relevance is high, but the evidence quality cannot be assessed without the full paper.",
+        "relevant_quotes": [
+          "Agriculture is the main source of food, raw material and fuel which contributes to the economic development of a nation.",
+          "Nearly 66% of the population depends on agriculture directly or indirectly.",
+          "Crop disease alleviates the production and also the quality of food."
+        ],
+        "extraction_result": {
+          "accuracy": {
+            "value": "N/A",
+            "description": "Reported model accuracy percentage. (String, use 'N/A' if unknown)"
+          },
+          "dataset_size": {
+            "value": -1,
+            "description": "Number of images in the dataset. (Use -1 if unknown)"
+          }
+        },
+        "exclusion_criteria_result": {
+          "no_comparison": {
+            "value": false,
+            "description": "Exclude papers without a direct comparison to traditional methods. (Must be true/false)"
+          }
+        }
+      },
+      {
+        "title": "Deep Learning model of sequential image classifier for crop disease detection in plantain tree cultivation",
+        "authors": [
+          "M. Nandhini",
+          "K. U. Kala",
+          "M. Thangadarshini",
+          "Shradha Verma"
+        ],
+        "year": 2022,
+        "relevance_score": 0.8749999999999999,
+        "analysis": "The paper presents a deep learning model (G-RecConNN) for crop disease detection in plantain trees, explicitly aiming to improve early prediction and support farmers. The methodology involves a sequential image classification model combining CNN and RNN to capture spatial and temporal features from image sequences. The model's performance is evaluated experimentally, suggesting its potential for integration into farmer support systems. This is directly relevant to the claim that deep learning outperforms traditional methods, as the paper introduces and tests a novel deep learning approach for crop disease detection. The evidence quality depends on the specifics of the experimental results (which are not provided in detail in the excerpt), but the paper's focus on a novel deep learning architecture suggests an advancement over potentially less sophisticated traditional methods. Limitations are not explicitly discussed in this excerpt, but could include the generalizability of the model to other crops or diseases, computational cost, or the need for large, high-quality datasets. More information is needed about the experiments performed and a comparison against traditional methods to assess the extent of the outperformance.",
+        "relevant_quotes": [
+          "The objective of this research work is to create a Deep Learning Model for the disease classification and its early prediction to support farmers in plantain tree cultivation.",
+          "A new sequential image classification model is proposed to detect the diseases by combining RNN and CNN, which is named as Gated-Recurrent Convolutional Neural Network (G-RecConNN).",
+          "CNN catches potential features from the images in the sequences, while RNN is used to learn the temporal features between the images in the sequences."
+        ],
+        "extraction_result": {
+          "accuracy": {
+            "value": "N/A",
+            "description": "Reported model accuracy percentage. (String, use 'N/A' if unknown)"
+          },
+          "dataset_size": {
+            "value": -1,
+            "description": "Number of images in the dataset. (Use -1 if unknown)"
+          }
+        },
+        "exclusion_criteria_result": {
+          "no_comparison": {
+            "value": false,
+            "description": "Exclude papers without a direct comparison to traditional methods. (Must be true/false)"
+          }
+        }
+      }
+    ],
+    "metadata": {}
+  }
+}

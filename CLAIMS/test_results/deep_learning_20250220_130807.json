@@ -1,0 +1,113 @@
+{
+  "Deep learning outperforms traditional methods in crop disease detection": {
+    "claim": "Deep learning outperforms traditional methods in crop disease detection",
+    "papers": [
+      {
+        "title": "Recent Advances in Crop Disease Detection Using UAV and Deep Learning Techniques",
+        "authors": [
+          "Tej Bahadur Shahi",
+          "Cheng‐Yuan Xu",
+          "Arjun Neupane",
+          "William Guo"
+        ],
+        "year": 2023,
+        "score": 0.95,
+        "extraction_result": {
+          "accuracy": {
+            "value": "N/A",
+            "description": "Reported model accuracy percentage. (String, use 'N/A' if unknown)"
+          },
+          "dataset_size": {
+            "value": -1,
+            "description": "Number of images in the dataset. (Use -1 if unknown)"
+          }
+        },
+        "exclusion_criteria_result": {
+          "no_comparison": {
+            "value": false,
+            "description": "Exclude papers without a direct comparison to traditional methods. (Must be true/false)"
+          }
+        },
+        "analysis": "The paper \"Recent Advances in Crop Disease Detection Using UAV and Deep Learning Techniques\" is directly relevant to the claim that deep learning outperforms traditional methods in crop disease detection. The paper is a review of recent advances, implying a comparison against older, traditional methods. It focuses on the application of deep learning techniques in conjunction with UAVs for improved disease detection. The methodology involves reviewing existing literature, so the evidence quality depends on the quality of the reviewed papers. Limitations are inherent in review papers, reflecting the limitations of the studies reviewed. Direct relevance is high, as the paper's central theme aligns perfectly with the claim. It implicitly argues for the superiority of deep learning by focusing on its advancements.",
+        "relevant_quotes": [
+          "Remote Sens.",
+          "Recent Advances in Crop Disease Detection Using UAV and Deep Learning Techniques",
+          "School of Engineering and Technology, Central Queensland University, Rockhampton, QLD 4701, Australia"
+        ],
+        "metrics": {
+          "dataset_size": {
+            "value": -1,
+            "description": "Number of images in the dataset. (Use -1 if unknown)"
+          },
+          "accuracy": {
+            "value": "N/A",
+            "description": "Reported model accuracy percentage. (String, use 'N/A' if unknown)"
+          },
+          "methods_compared": "N/A",
+          "hardware": "N/A"
+        },
+        "criteria": {
+          "no_comparison": {
+            "value": false,
+            "description": "Exclude papers without a direct comparison to traditional methods. (Must be true/false)"
+          },
+          "small_dataset": false
+        }
+      },
+      {
+        "title": "New perspectives on plant disease characterization based on deep learning",
+        "authors": [
+          "Sue Han Lee",
+          "Hervé Goëau",
+          "Pierre Bonnet",
+          "Alexis Joly"
+        ],
+        "year": 2020,
+        "score": 0.9083333333333333,
+        "extraction_result": {
+          "accuracy": {
+            "value": "N/A",
+            "description": "Reported model accuracy percentage. (String, use 'N/A' if unknown)"
+          },
+          "dataset_size": {
+            "value": -1,
+            "description": "Number of images in the dataset. (Use -1 if unknown)"
+          }
+        },
+        "exclusion_criteria_result": {
+          "no_comparison": {
+            "value": false,
+            "description": "Exclude papers without a direct comparison to traditional methods. (Must be true/false)"
+          }
+        },
+        "analysis": "This paper provides a new perspective on plant disease characterization using deep learning. It explores transfer learning and pre-trained models for identifying plant diseases, even generalizing to unseen crops. The methodology involves training models and experimenting with different feature transfer approaches. The evidence quality appears to be moderate, relying on experiments and comparisons. Limitations aren't explicitly stated in the excerpt, but could involve dataset biases or generalization challenges. The paper is directly relevant to the claim that deep learning outperforms traditional methods in crop disease detection, as it focuses on deep learning techniques for this task, although it doesn't directly compare against traditional methods in this excerpt.",
+        "relevant_quotes": [
+          "New perspective on plant disease characterization based on deep learning is proposed.",
+          "Cross-features transfer from different domains affects disease features modeling.",
+          "Features transferred from the counter domain generalize better than the plant domain."
+        ],
+        "metrics": {
+          "dataset_size": {
+            "value": -1,
+            "description": "Number of images in the dataset. (Use -1 if unknown)"
+          },
+          "accuracy": {
+            "value": "N/A",
+            "description": "Reported model accuracy percentage. (String, use 'N/A' if unknown)"
+          },
+          "methods_compared": "N/A",
+          "hardware": "N/A"
+        },
+        "criteria": {
+          "no_comparison": {
+            "value": false,
+            "description": "Exclude papers without a direct comparison to traditional methods. (Must be true/false)"
+          },
+          "small_dataset": false
+        }
+      }
+    ],
+    "num_total_papers": 2,
+    "timestamp": "2025-02-20T13:08:07.564264"
+  }
+}

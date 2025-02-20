@@ -1,0 +1,111 @@
+{
+  "Deep learning outperforms traditional methods in crop disease detection": {
+    "claim": "Deep learning outperforms traditional methods in crop disease detection",
+    "papers": [
+      {
+        "title": "Recent Advances in Crop Disease Detection Using UAV and Deep Learning Techniques",
+        "authors": [
+          "Tej Bahadur Shahi",
+          "Cheng‐Yuan Xu",
+          "Arjun Neupane",
+          "William Guo"
+        ],
+        "year": 2023,
+        "score": 0.9125,
+        "extraction_result": {
+          "accuracy": {
+            "value": "N/A",
+            "description": "Reported model accuracy percentage. (String, use 'N/A' if unknown)"
+          },
+          "dataset_size": {
+            "value": -1,
+            "description": "Number of images in the dataset. (Use -1 if unknown)"
+          }
+        },
+        "exclusion_criteria_result": {
+          "no_comparison": {
+            "value": false,
+            "description": "Exclude papers without a direct comparison to traditional methods. (Must be true/false)"
+          }
+        },
+        "analysis": "The paper \"Recent Advances in Crop Disease Detection Using UAV and Deep Learning Techniques\" by Shahi et al. (2023) directly addresses the claim that deep learning outperforms traditional methods in crop disease detection. The paper is a review article that examines recent studies using UAV (Unmanned Aerial Vehicle) imagery and deep learning for this purpose. Methodology involves summarizing and synthesizing findings from various studies. Evidence quality varies depending on the cited studies, but the review format allows for a broad overview. Limitations stem from the scope of the reviewed studies. Direct relevance is high, as the paper focuses on the specific comparison of deep learning and traditional methods within the context of crop disease detection. The title includes the keywords of interest. The paper explicitly looks at recent advances which can be assumed include improvements over older, traditional methods.",
+        "relevant_quotes": [
+          "Remote Sens.",
+          "Recent Advances in Crop Disease Detection Using UAV and Deep Learning Techniques",
+          "Author to whom correspondence should be addressed."
+        ],
+        "metrics": {
+          "dataset_size": {
+            "value": -1,
+            "description": "Number of images in the dataset. (Use -1 if unknown)"
+          },
+          "accuracy": {
+            "value": "N/A",
+            "description": "Reported model accuracy percentage. (String, use 'N/A' if unknown)"
+          },
+          "methods_compared": "N/A",
+          "hardware": "N/A"
+        },
+        "criteria": {
+          "no_comparison": {
+            "value": false,
+            "description": "Exclude papers without a direct comparison to traditional methods. (Must be true/false)"
+          },
+          "small_dataset": false
+        }
+      },
+      {
+        "title": "A method of detecting apple leaf diseases based on improved convolutional neural network",
+        "authors": [
+          "Jie Di",
+          "Qing Li"
+        ],
+        "year": 2022,
+        "score": 0.8958333333333334,
+        "extraction_result": {
+          "accuracy": {
+            "value": "N/A",
+            "description": "Reported model accuracy percentage. (String, use 'N/A' if unknown)"
+          },
+          "dataset_size": {
+            "value": 1404,
+            "description": "Number of images in the dataset. (Use -1 if unknown)"
+          }
+        },
+        "exclusion_criteria_result": {
+          "no_comparison": {
+            "value": false,
+            "description": "Exclude papers without a direct comparison to traditional methods. (Must be true/false)"
+          }
+        },
+        "analysis": "The paper investigates the use of a deep learning model (DF-Tiny-YOLO) for detecting apple leaf diseases, comparing its performance against traditional methods is not explicitly done in this excerpt. The methodology involves improvements to a YOLO-based object detection model, focusing on feature reuse and parameter reduction. The evidence is based on a dataset of 1,404 images of four common apple leaf diseases. A limitation is that the excerpt does not provide a direct comparison to traditional methods, only stating that 'numerous studies have investigated deep learning' for this purpose, meaning that it's not a head to head comparison within this paper. Therefore, while the paper demonstrates the application of deep learning to crop disease detection, it does not directly support the claim that deep learning *outperforms* traditional methods within the scope of this paper. The paper's direct relevance is that it uses deep learning for crop disease detection.",
+        "relevant_quotes": [
+          "Apple tree diseases have perplexed orchard farmers for several years.",
+          "At present, numerous studies have investigated deep learning for fruit and vegetable crop disease detection.",
+          "a new target detection model of apple leaf diseases DF-Tiny-YOLO, based on deep learning, is proposed to realize faster and more effective automatic detection of apple leaf diseases."
+        ],
+        "metrics": {
+          "dataset_size": {
+            "value": 1404,
+            "description": "Number of images in the dataset. (Use -1 if unknown)"
+          },
+          "accuracy": {
+            "value": "N/A",
+            "description": "Reported model accuracy percentage. (String, use 'N/A' if unknown)"
+          },
+          "methods_compared": "N/A",
+          "hardware": "N/A"
+        },
+        "criteria": {
+          "no_comparison": {
+            "value": false,
+            "description": "Exclude papers without a direct comparison to traditional methods. (Must be true/false)"
+          },
+          "small_dataset": false
+        }
+      }
+    ],
+    "num_total_papers": 2,
+    "timestamp": "2025-02-20T12:46:13.561114"
+  }
+}

@@ -35,12 +35,12 @@ class CORESearch(BaseSearch):
             "Accept": "application/json",
         }
 
-        # Fixed sort parameter format
+        # Fixed sort parameter: replacing "citations:desc" with a supported value "relevance"
         params = {
             "q": query,
             "limit": limit * 2,  # Request extra to allow for filtering
             "scroll": True,
-            "sort": "citations:desc"  # Correct string format
+            "sort": "relevance"  # Changed from "citations:desc" to "relevance"
         }
 
         logger.debug(f"CORE API request parameters: {json.dumps(params, indent=2)}")

@@ -5,7 +5,7 @@
 groups = ["default"]
 strategy = ["inherit_metadata"]
 lock_version = "4.5.0"
-content_hash = "sha256:abaef73138e2bfa632e1734df1316a1a63be3aafa65459203b25ff120ceadd10"
+content_hash = "sha256:50db30f5c326a4b010a8d6a25c6b6d948d45812f806b28a2321db9784471c6b7"
 
 [[metadata.targets]]
 requires_python = ">=3.9"
@@ -1133,7 +1133,7 @@ files = [
 
 [[package]]
 name = "logfire"
-version = "3.6.0"
+version = "3.6.1"
 requires_python = ">=3.8"
 summary = "The best Python observability tool! 🪵🔥"
 groups = ["default"]
@@ -1148,19 +1148,19 @@ dependencies = [
     "typing-extensions>=4.1.0",
 ]
 files = [
-    {file = "logfire-3.6.0-py3-none-any.whl", hash = "sha256:9d215ede261cb579d4bad77ff3419ee17145a2a87a9864e1fda21f3143fa2307"},
-    {file = "logfire-3.6.0.tar.gz", hash = "sha256:065a12dc727c92450bb05c0bf17b6ca36d1ee1ba99b6ca53d0f88d877ac863d9"},
+    {file = "logfire-3.6.1-py3-none-any.whl", hash = "sha256:de8d7d9e21b292b0fb5cc653a2d6b93be33828ba9e5b2645d09135a7ffbdbf1e"},
+    {file = "logfire-3.6.1.tar.gz", hash = "sha256:93b11d94ad1a19a8bfc1fd97b40ecc3c919a3edc6a5e51cb2a153e64cd04aa9e"},
 ]
 
 [[package]]
 name = "logfire-api"
-version = "3.6.0"
+version = "3.6.1"
 requires_python = ">=3.8"
 summary = "Shim for the Logfire SDK which does nothing unless Logfire is installed"
 groups = ["default"]
 files = [
-    {file = "logfire_api-3.6.0-py3-none-any.whl", hash = "sha256:71d90148655c03f7616810cc58198261d0cb7c9185ac8d300f77561e39019056"},
-    {file = "logfire_api-3.6.0.tar.gz", hash = "sha256:35123d788625f41555fa78d516d3bc45ffaa3fd57181b6188708a3c77311a1f4"},
+    {file = "logfire_api-3.6.1-py3-none-any.whl", hash = "sha256:b729981a28415de71c574536c6c53e6e801a7108f5d9f6615f152762ac66f684"},
+    {file = "logfire_api-3.6.1.tar.gz", hash = "sha256:37fd40bf3b26f9740345cc7a56870f8a20f9c18cd185b713d3b61c2f07662e8d"},
 ]
 
 [[package]]

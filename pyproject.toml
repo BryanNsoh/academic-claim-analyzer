@@ -1,8 +1,19 @@
-[build-system]
-requires = ["setuptools>=45", "setuptools_scm[toml]>=6.2"]
-build-backend = "setuptools.build_meta"
+[project]
+name = "academic-claim-analyzer"
+version = "0.1.0"
+description = "Default template for PDM package"
+authors = [
+    {name = "BryanNsoh", email = "bryan.anye.5@gmail.com"},
+]
+dependencies = ["aiohttp>=3.11.12", "anthropic>=0.46.0", "google-generativeai>=0.8.4", "openai>=1.63.2", "python-dotenv>=1.0.1", "tiktoken>=0.9.0", "beautifulsoup4>=4.13.3", "PyMuPDF>=1.25.3", "playwright==1.36.0", "fake-useragent>=2.0.3", "async-llm-handler>=0.2.0", "requests>=2.32.3", "pydantic>=2.10.6", "aiolimiter>=1.2.1", "markdownify>=0.14.1", "llm-handler-validator==0.1.2"]
+requires-python = ">=3.9"
+readme = "README.md"
+license = {text = "MIT"}
 
-[tool.setuptools_scm]
-write_to = "academic_claim_analyzer/_version.py"
-version_scheme = "no-guess-dev"
-local_scheme = "no-local-version"
+[build-system]
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
+
+
+[tool.pdm]
+distribution = true

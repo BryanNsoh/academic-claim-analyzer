@@ -1,0 +1,31 @@
+config:
+  processing:
+    num_queries: 3
+    papers_per_query: 5
+    num_papers_to_return: 2
+  logging:
+    level: INFO
+  search:
+    platforms:
+      - openalex
+      - scopus
+    min_year: 2010
+    max_year: 2024
+
+claims:
+  - id: basic_claim
+    claim: "Machine learning improves crop yield predictions"
+
+  - id: deep_learning
+    claim: "Deep learning outperforms traditional methods in crop disease detection"
+    exclusion_criteria:
+      no_comparison:
+        type: boolean
+        description: "Exclude papers without a direct comparison to traditional methods."
+    data_extraction_schema:
+      accuracy:
+        type: float
+        description: "Reported model accuracy percentage."
+      dataset_size:
+        type: integer
+        description: "Number of images in the dataset."

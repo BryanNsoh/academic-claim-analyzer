@@ -1,7 +1,5 @@
 # academic_claim_analyzer/__init__.py
 
-from ._version import __version__
-
 def get_analyze_claim():
     from .main import analyze_claim
     return analyze_claim

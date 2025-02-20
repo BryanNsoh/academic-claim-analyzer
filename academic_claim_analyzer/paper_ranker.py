@@ -221,9 +221,8 @@ def _create_ranking_prompt(group: List[Paper], claim: str) -> str:
     """Build a multi-paper prompt for a single 'ranking' call."""
     lines = []
     for p in group:
-        snippet = (p.full_text or "")[:300]
         lines.append(
-            f"Paper ID: {p.id}\nTitle: {p.title[:100]}\nExcerpt: {snippet}\n"
+            f"Paper ID: {p.id}\nTitle: {p.title}\Content: {p.full_text}\n"
         )
     papers_block = "\n".join(lines)
     prompt = f"""
@@ -256,7 +255,7 @@ async def _get_paper_analysis(paper: Paper, claim: str) -> Optional[AnalysisResp
 Analyze this paper's relevance to the claim: "{claim}"
 
 Paper Title: {paper.title}
-Full Text (excerpt): {paper.full_text[:1000] if paper.full_text else ''}
+Full Text: {paper.full_text if paper.full_text else ''}
 
 Explain methodology, evidence quality, limitations, and direct relevance.
 Also provide 3 relevant quotes from the text.
@@ -297,7 +296,7 @@ async def _evaluate_paper(
     prompt = f"""
 Given this paper:
 Title: {paper.title}
-Excerpt: {paper.full_text[:1000] if paper.full_text else ''}
+Content: {paper.full_text if paper.full_text else ''}
 
 Return valid JSON for the combined schema:
 {json.dumps(CombinedModel.model_json_schema(), indent=2)}

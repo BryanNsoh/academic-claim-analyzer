@@ -236,15 +236,17 @@ async def _apply_exclusion_criteria(analysis: ClaimAnalysis) -> None:
             exclusion_criteria_result={},
             extraction_result={}
         )
-        snippet = (rp.full_text or rp.abstract or "")[:1000]
         prompt_text = f"""
-Evaluate the following paper based on the provided criteria:
+            Assess the following academic paper against the specified exclusion criteria and data extraction requirements:
 
-Title: {rp.title}
-Abstract/Excerpt: {snippet}
+            Title: {rp.title}
+            Full Text: {rp.full_text}
 
-Please provide JSON matching the exact fields of the schema:
-"""
+            Return a JSON object that exactly matches the fields defined in the provided schema. Include all required fields:
+            - For exclusion criteria (if any), use boolean values (true/false) to indicate if the paper meets each condition.
+            - For data extraction (if any), provide the requested values based on the full text, using default values (-1 for numbers, 'N/A' for strings, etc.) if information is missing or unclear.
+            Ensure the JSON structure aligns with the schema and includes no additional fields.
+            """
         prompts.append(prompt_text)
         ranked_papers.append(rp)
 

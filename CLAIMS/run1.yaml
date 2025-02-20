@@ -1,0 +1,97 @@
+config:
+  processing:
+    num_queries: 3
+    papers_per_query: 5
+    num_papers_to_return: 2
+  logging:
+    level: INFO
+  search:
+    platforms:
+      - openalex
+      - scopus
+      - core
+      - arxiv
+    min_year: 2010
+    max_year: 2024
+
+- claim_set_id: irrigation_system_research_needs
+  claims:
+    - claim: "Integrated irrigation systems developed between 2020 and 2025 utilize multi-sensor data, IoT connectivity, and advanced analytics to optimize water use, providing a benchmark for assessing the novelty of new irrigation platforms."
+      comment_id: 10
+      exclusion_criteria:
+        is_review: {description: "Is the paper a review article? True if yes, as primary studies are preferred."}
+        published_before_2020: {description: "Was the paper published before 2020? True if yes, to focus on recent advancements."}
+      information_extraction:
+        sensor_types: {description: "Types of sensors used (e.g., soil moisture, canopy temperature) and their specifications."}
+        connectivity_protocols: {description: "Communication protocols employed (e.g., LoRaWAN, MQTT) and their configurations."}
+        analytics_methods: {description: "Analytical techniques applied (e.g., machine learning, threshold-based) and their implementation details."}
+        system_limitations: {description: "Reported challenges or limitations (e.g., scalability, cost) affecting deployment."}
+      search_query: "integrated irrigation systems multi-sensor IoT analytics 2020-2025"
+
+    - claim: "Crop Water Stress Index (CWSI), Soil Water Stress Index (SWSI), and fuzzy logic methods have established definitions and documented applications in irrigation scheduling, forming a foundation for their use in automated systems."
+      comment_id: 80
+      exclusion_criteria:
+        not_peer_reviewed: {description: "Is the paper not peer-reviewed? True if yes, to ensure academic rigor."}
+      information_extraction:
+        method_formulation: {description: "Mathematical formulation or detailed definition of CWSI, SWSI, or fuzzy logic as applied to irrigation."}
+        historical_applications: {description: "Specific examples of prior use in irrigation scheduling, including crops and outcomes."}
+        validation_studies: {description: "Empirical studies validating the accuracy or effectiveness of these methods."}
+      search_query: "(CWSI OR 'Crop Water Stress Index' OR SWSI OR 'Soil Water Stress Index' OR 'fuzzy logic') irrigation scheduling"
+
+    - claim: "The Penman-Monteith formula for computing Reference Evapotranspiration (ETo) is a standardized method in agricultural water management, supported by a widely recognized foundational reference."
+      comment_id: 208
+      exclusion_criteria:
+        published_after_2010: {description: "Was the paper published after 2010? True if yes, to prioritize foundational works over recent adaptations."}
+      information_extraction:
+        citation_details: {description: "Full bibliographic details of the canonical Penman-Monteith reference (e.g., authors, year, title)."}
+        standard_context: {description: "Context in which the formula was standardized (e.g., FAO-56, ASCE guidelines)."}
+      search_query: "'Penman-Monteith' 'Reference Evapotranspiration' ETo standard"
+
+    - claim: "The Mamdani inference method serves as a foundational technique in fuzzy logic systems for irrigation scheduling, with documented origins and applications in agricultural contexts."
+      comment_id: 234
+      exclusion_criteria:
+        not_peer_reviewed: {description: "Is the paper not peer-reviewed? True if yes, to ensure credibility."}
+      information_extraction:
+        method_definition: {description: "Precise definition of the Mamdani inference method, including its rule-based structure and defuzzification process."}
+        irrigation_examples: {description: "Examples of Mamdani’s application in irrigation, specifying inputs (e.g., soil moisture) and outputs (e.g., irrigation amount)."}
+      search_query: "'Mamdani inference' 'fuzzy logic' irrigation"
+
+    - claim: "A threshold value of 0.5 for Crop Water Stress Index (CWSI) and Soil Water Stress Index (SWSI) is a widely accepted standard for triggering irrigation in crop management studies."
+      comment_id: 243
+      exclusion_criteria:
+        published_before_2010: {description: "Was the paper published before 2010? True if yes, to focus on current practices."}
+      information_extraction:
+        threshold_values: {description: "Exact threshold values for CWSI or SWSI (e.g., 0.5) and their associated stress levels."}
+        empirical_support: {description: "Experimental or field data justifying the threshold, including crop types and conditions."}
+        irrigation_outcomes: {description: "Reported effects of using the threshold on irrigation timing and crop health."}
+      search_query: "(CWSI OR SWSI) threshold irrigation crop stress"
+
+    - claim: "Field studies of crops under water stress conditions exhibit characteristic Crop Water Stress Index (CWSI) and Soil Water Stress Index (SWSI) values that illustrate stress dynamics."
+      comment_id: 292
+      exclusion_criteria:
+        is_review: {description: "Is the paper a review article? True if yes, as primary field studies are preferred."}
+      information_extraction:
+        stress_scenarios: {description: "Detailed description of water stress conditions (e.g., drought duration, soil type)."}
+        index_measurements: {description: "Measured CWSI and SWSI values under stress, with units and timeframes."}
+        crop_response: {description: "Observed crop responses (e.g., wilting, yield impact) linked to these indices."}
+      search_query: "crop water stress (CWSI OR SWSI) case study"
+
+    - claim: "Corn exhibits a predominant pattern of water uptake from upper soil layers, with quantifiable distribution across depths supported by agronomic research."
+      comment_id: 295
+      exclusion_criteria:
+        not_peer_reviewed: {description: "Is the paper not peer-reviewed? True if yes, to ensure scientific validity."}
+      information_extraction:
+        uptake_distribution: {description: "Percentage or volume of water uptake by corn roots at specific depths (e.g., 40% at 0–30 cm)."}
+        experimental_data: {description: "Field or lab data supporting the uptake pattern, including soil and growth conditions."}
+        root_activity: {description: "Description of corn root depth and activity influencing water extraction."}
+      search_query: "corn root water uptake soil depth"
+
+    - claim: "Precision irrigation technologies encounter specific adoption barriers in agricultural settings, influencing their practical implementation among producers."
+      comment_id: 321
+      exclusion_criteria:
+        published_before_2015: {description: "Was the paper published before 2015? True if yes, to reflect recent trends."}
+      information_extraction:
+        adoption_barriers: {description: "Specific barriers (e.g., cost, technical complexity, lack of training) and their prevalence."}
+        facilitator_factors: {description: "Factors aiding adoption (e.g., subsidies, user-friendly design) and their impact."}
+        producer_perspectives: {description: "Qualitative or quantitative producer feedback on adopting irrigation technologies."}
+      search_query: "precision irrigation adoption barriers producers"

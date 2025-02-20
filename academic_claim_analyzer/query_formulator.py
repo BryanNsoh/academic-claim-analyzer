@@ -4,8 +4,7 @@ from typing import List
 import logging
 from pydantic import BaseModel, Field
 
-from .paper_ranker import llm_handler, get_model_or_default, DEFAULT_LLM_MODEL
-
+from .paper_ranker import llm_handler, get_model_or_default
 logger = logging.getLogger(__name__)
 
 SCOPUS_SEARCH_GUIDE = """
@@ -17,7 +16,7 @@ Field codes (e.g. TITLE, ABS, KEY, AUTH, AFFIL) to restrict searches to specific
 Boolean operators (AND, OR, AND NOT) to combine search terms
 Proximity operators (W/n, PRE/n) to find words within a specified distance - W/n: Finds terms within \"n\" words of each other, regardless of order. Example: journal W/15 publishing finds articles where \"journal\" and \"publishing\" are within two words of each other. - PRE/n: Finds terms in the specified order and within \"n\" words of each other. Example: data PRE/50 analysis finds articles where \"data\" appears before \"analysis\" within three words. - To find terms in the same sentence, use 15. To find terms in the same paragraph, use 50 -
 Quotation marks for loose/approximate phrase searches
-Braces {} for exact phrase searches
+Braces \{\} for exact phrase searches
 Wildcards (*) to capture variations of search terms
 
 Invalid syntax includes:

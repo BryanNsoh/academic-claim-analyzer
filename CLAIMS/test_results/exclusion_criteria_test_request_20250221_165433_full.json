@@ -1,0 +1,95 @@
+{
+  "exclusion_criteria_test_request": {
+    "query": "Impact of climate change on coffee production",
+    "ranking_guidance": "Focus on studies with quantitative data and specific geographic regions.",
+    "timestamp": "2025-02-21T22:43:20.603734",
+    "parameters": {
+      "num_queries": 2,
+      "papers_per_query": 3,
+      "num_papers_to_return": 2
+    },
+    "queries": [
+      {
+        "query": "https://api.openalex.org/works?search=%22climate+change%22+%2B%22coffee+production%22&sort=relevance_score:desc&per-page=30",
+        "source": "openalex",
+        "timestamp": "2025-02-21 22:43:21.879337"
+      },
+      {
+        "query": "https://api.openalex.org/works?search=%22impact+of+climate+change%22+%2B%22coffee+yield%22+OR+%22coffee+quality%22&sort=relevance_score:desc&per-page=30",
+        "source": "openalex",
+        "timestamp": "2025-02-21 22:43:21.879337"
+      },
+      {
+        "query": "TITLE-ABS-KEY((\"climate change\" OR \"global warming\") AND (\"coffee production\" OR \"coffee yield\" OR \"coffee cultivation\") AND (impact OR effect* OR influence))",
+        "source": "scopus",
+        "timestamp": "2025-02-21 22:43:23.289370"
+      },
+      {
+        "query": "TITLE-ABS-KEY((\"Coffea arabica\" OR \"Coffea canephora\") AND (climate W/10 (vulnerability OR risk OR adaptation)) AND (production OR yield OR quality))",
+        "source": "scopus",
+        "timestamp": "2025-02-21 22:43:23.289370"
+      },
+      {
+        "query": "all:climate change AND coffee production",
+        "source": "arxiv",
+        "timestamp": "2025-02-21 22:43:23.982506"
+      },
+      {
+        "query": "all:impact of climate variability on coffee yields",
+        "source": "arxiv",
+        "timestamp": "2025-02-21 22:43:23.982506"
+      },
+      {
+        "query": "title:(climate change AND coffee) AND abstract:(climate change AND coffee production)",
+        "source": "core",
+        "timestamp": "2025-02-21 22:43:24.903607"
+      },
+      {
+        "query": "title:(\"coffee cultivation\" OR \"coffee farming\") AND abstract:(climate change AND impact AND vulnerability)",
+        "source": "core",
+        "timestamp": "2025-02-21 22:43:24.903607"
+      }
+    ],
+    "ranked_papers": [
+      {
+        "title": "Pangraphs as models of higher-order interactions",
+        "authors": [
+          "Mateusz Iskrzyński",
+          "Aleksandra Puchalska",
+          "Aleksandra Grzelik",
+          "Gökhan Mutlu"
+        ],
+        "year": 2025,
+        "relevance_score": 0.8666666666666667,
+        "analysis": "This paper focuses on developing a mathematical framework called 'pangraphs' to model higher-order interactions within complex systems. While the paper does mention a 'real-world coffee agroecosystem' as an example, it primarily uses this example to demonstrate the application and advantages of the pangraph model in representing ecological relationships. The study doesn't directly address the impact of climate change on coffee production, but rather uses coffee agroecosystems to showcase the pangraph's ability to model complex ecological interactions. The quantitative aspect is present in the mathematical formulation of the pangraph, not in providing quantitative data related to climate change and coffee production. Therefore, regarding the research query, this paper has a low relevance despite mentioning coffee. It focuses on modeling ecological interactions, using coffee as an example, but does not provide data or analysis on the impact of climate change on coffee production, as requested by the user's ranking guidance.",
+        "relevant_quotes": [
+          "We construct a pangraph for a real-world coffee agroecosystem [1] and compare Katz centrality between its dihypergraph and pangraph representations, both analytically and numerically.",
+          "It represents the feeding and mutualistic interactions of organisms studied over 15 years in a 300-hectare organic coffee plantation in southern Mexico.",
+          "If a vertex modifies an interaction between two other vertices, then the three of them may have very asymmetric roles. It is indeed the case in a network model of a coffee agroecosystem [33, 34, 1]."
+        ],
+        "extraction_result": null,
+        "exclusion_criteria_result": null
+      },
+      {
+        "title": "Emergence of Fermi's Golden Rule in the Probing of a Quantum Many-Body\n  System",
+        "authors": [
+          "Jianyi Chen",
+          "Songtao Huang",
+          "Yunpeng Ji",
+          "Grant L. Schumacher",
+          "Alan Tsidilkovski",
+          "Alexander Schuckert",
+          "Gabriel G. T. Assumpção",
+          "Nir Navon"
+        ],
+        "year": 2025,
+        "relevance_score": 0.6,
+        "analysis": "This paper, \"Emergence of Fermi’s Golden Rule in the Probing of a Quantum Many-Body System,\" is not directly relevant to the research query \"Impact of climate change on coffee production.\" The paper is a theoretical study in the field of quantum physics, specifically concerning the observation and breakdown of Fermi's Golden Rule in a strongly interacting homogeneous spin-1/2 Fermi gas. The methodology involves experimental measurements of transition probabilities using radio-frequency fields and analysis of the system's dynamical response. The evidence is based on experimental data from ultracold gases. The paper's limitations lie in its focus on a highly controlled quantum system, which does not translate to the complexities of climate change and agricultural systems. Therefore, it lacks any direct relevance to the impact of climate change on coffee production, and it does not contain quantitative data or specific geographic regions related to agricultural production.",
+        "relevant_quotes": [],
+        "extraction_result": null,
+        "exclusion_criteria_result": null
+      }
+    ],
+    "metadata": {}
+  }
+}

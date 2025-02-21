@@ -1,0 +1,53 @@
+{
+  "basic_ml_yield_request": {
+    "request_id": "basic_ml_yield_request",
+    "parameters": {
+      "num_queries": 2,
+      "papers_per_query": 3,
+      "num_papers_to_return": 2
+    },
+    "top_papers": [
+      {
+        "title": "Crop yield prediction using machine learning: A systematic literature review",
+        "authors": [
+          "Thomas van Klompenburg",
+          "Ayalew Kassahun",
+          "Cagatay Catal"
+        ],
+        "year": 2020,
+        "score": 0.975,
+        "extraction_result": null,
+        "exclusion_criteria_result": null,
+        "analysis": "This paper is a systematic literature review focusing on machine learning applications in crop yield prediction. It synthesizes findings from 50 machine learning-based papers and 30 deep learning-based papers published up to 2020. The review methodology is clearly defined, addressing research questions related to algorithms, features, evaluation parameters, and challenges. The paper prioritizes recent studies, especially deep learning applications, aligning with the user's guidance. The analysis includes a discussion of the strengths and limitations of different machine learning techniques and identifies key features (temperature, rainfall, soil type) and algorithms (Neural Networks, CNN) used in crop yield prediction. While the review identifies challenges and limitations in the field, it acknowledges that the analysis is limited by the information available in the reviewed papers. The paper directly addresses the research query by providing a comprehensive overview of machine learning applications in crop yield prediction, with an emphasis on recent advancements and empirical evaluations.",
+        "relevant_quotes": [
+          "Machine learning (ML)-based crop yield prediction papers have been synthesized.",
+          "We selected 50 ML-based papers and later, 30 deep learning-based papers.",
+          "Most used features are temperature, rainfall, and soil type."
+        ]
+      },
+      {
+        "title": "Machine learning in agriculture: A comprehensive updated review",
+        "authors": [
+          "Benos L.",
+          "Tagarakis A.C.",
+          "Dolias G.",
+          "Berruto R.",
+          "Kateris D.",
+          "Bochtis D."
+        ],
+        "year": 2021,
+        "score": 0.9125,
+        "extraction_result": null,
+        "exclusion_criteria_result": null,
+        "analysis": "This review paper comprehensively analyzes machine learning (ML) applications in agriculture, specifically focusing on crop yield prediction, disease detection, weed detection, crop recognition, and crop quality. It prioritizes recent scholarly literature (2018-2020) and provides an updated view of ML applications in agricultural systems. The methodology includes a systematic literature review following PRISMA guidelines, covering Scopus, Google Scholar, ScienceDirect, PubMed, Web of Science, and MDPI. The paper identifies research areas, ML models, investigated crops, and implemented features and technologies. While it provides a broad overview, it does not delve deeply into specific empirical evaluations or provide original experimental data, which limits its strength as per user's ranking guidance favoring empirical evaluations. However, its recency and comprehensive nature make it highly relevant for understanding the current landscape of ML in crop yield prediction.",
+        "relevant_quotes": [
+          "In particular, we focus on reviewing the relevant literature of the last three years (2018–2020) for the intention of providing an updated view of ML applications in agricultural systems.",
+          "Yield Prediction\nIn general, yield prediction is one of the most important and challenging topics in modern agriculture. An accurate model can help, for instance, the farm owners to take informed management decisions on what to grow towards matching the crop to the existing market’s demands [20].",
+          "The results indicated that this topic pertains to different disciplines that favour convergence research at the international level. Furthermore, crop management was observed to be at the centre of attention. A plethora of machine learning algorithms were used, with those belonging to Artificial Neural Networks being more efficient."
+        ]
+      }
+    ],
+    "num_total_papers": 2,
+    "timestamp": "2025-02-21T22:41:07.753562"
+  }
+}

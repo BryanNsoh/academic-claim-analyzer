@@ -1,0 +1,56 @@
+{
+  "combined_features_request": {
+    "query": "Wearable sensors for monitoring livestock health",
+    "ranking_guidance": "Rank based on practical applicability and validation in real-world farm settings.",
+    "timestamp": "2025-02-21T22:53:33.597077",
+    "parameters": {
+      "num_queries": 2,
+      "papers_per_query": 3,
+      "num_papers_to_return": 2
+    },
+    "queries": [
+      {
+        "query": "https://api.openalex.org/works?search=%22wearable+sensors%22+%2B%22livestock+health%22+%2B%22monitoring+systems%22&sort=relevance_score:desc&per-page=30",
+        "source": "openalex",
+        "timestamp": "2025-02-21 22:53:35.008598"
+      },
+      {
+        "query": "https://api.openalex.org/works?search=%22animal+biotelemetry%22+%2B%22remote+monitoring%22+%2B%22livestock+welfare%22&sort=relevance_score:desc&per-page=30",
+        "source": "openalex",
+        "timestamp": "2025-02-21 22:53:35.008598"
+      },
+      {
+        "query": "TITLE-ABS-KEY((livestock OR cattle OR sheep OR poultry OR pigs OR goats) AND (health OR wellbeing OR welfare) AND (sensor* OR \"wearable device*\"))",
+        "source": "scopus",
+        "timestamp": "2025-02-21 22:53:36.371831"
+      },
+      {
+        "query": "TITLE-ABS-KEY((\"animal monitoring\" OR \"livestock monitoring\") AND (sensor* OR \"wearable technology\") AND (health OR disease OR behavior))",
+        "source": "scopus",
+        "timestamp": "2025-02-21 22:53:36.371831"
+      },
+      {
+        "query": "all:wearable sensors livestock health monitoring",
+        "source": "arxiv",
+        "timestamp": "2025-02-21 22:53:37.032182"
+      },
+      {
+        "query": "all:animal health wearable technology",
+        "source": "arxiv",
+        "timestamp": "2025-02-21 22:53:37.032182"
+      },
+      {
+        "query": "title:(\"wearable sensor\" OR \"wearable device\" OR \"body-worn sensor\") AND abstract:(livestock OR cattle OR sheep OR poultry OR swine OR goats) AND abstract:(health monitoring OR disease detection OR vital signs OR physiological parameters)",
+        "source": "core",
+        "timestamp": "2025-02-21 22:53:38.626561"
+      },
+      {
+        "query": "title:(livestock OR cattle OR sheep OR poultry OR swine OR goats) AND abstract:(\"wearable sensor\" OR \"remote monitoring\") AND abstract:(health OR wellbeing OR welfare) AND abstract:(accelerometer OR gyroscope OR ECG OR \"body temperature\")",
+        "source": "core",
+        "timestamp": "2025-02-21 22:53:38.626561"
+      }
+    ],
+    "ranked_papers": [],
+    "metadata": {}
+  }
+}

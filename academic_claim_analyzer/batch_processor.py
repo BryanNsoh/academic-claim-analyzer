@@ -6,20 +6,20 @@ import json
 import os
 import logging
 from datetime import datetime
-from typing import List, Dict, Any, Optional, Union
+from typing import List, Dict, Any, Optional
 import yaml
 
 from .debug_utils import configure_logging
-from .models import ClaimAnalysis
+from .models import RequestAnalysis
 
 logger = logging.getLogger(__name__)
 
 # Initialize with default configuration
 configure_logging()
 
-def analyze_claim(*args, **kwargs):
-    from . import get_analyze_claim
-    return get_analyze_claim()(*args, **kwargs)
+def analyze_request(*args, **kwargs):
+    from . import get_analyze_request
+    return get_analyze_request()(*args, **kwargs)
 
 class BatchProcessorConfig:
     """Configuration container for batch processing settings."""
@@ -29,14 +29,14 @@ class BatchProcessorConfig:
         self.num_queries = processing.get('num_queries', 5)
         self.papers_per_query = processing.get('papers_per_query', 5)
         self.num_papers_to_return = processing.get('num_papers_to_return', 3)
-        
+
         # Logging settings
         logging_config = config_data.get('logging', {})
         self.log_level = logging_config.get('level', 'INFO')
-        
+
         # Search settings
         search = config_data.get('search', {})
-        self.search_platforms = search.get('platforms', ['openalex', 'scopus', 'core'])
+        self.search_platforms = search.get('platforms', ['openalex', 'scopus', 'core', 'arxiv'])
         self.min_year = search.get('min_year', None)
         self.max_year = search.get('max_year', None)
 
@@ -45,117 +45,106 @@ def load_batch_config(yaml_file: str) -> BatchProcessorConfig:
     try:
         with open(yaml_file, 'r', encoding='utf-8') as f:
             data = yaml.safe_load(f)
-            
-        # Look for global configuration section
-        config_data = {}
-        if isinstance(data, list):
-            # Check first item for global config
-            if data and isinstance(data[0], dict):
-                config_data = data[0].get('config', {})
-        elif isinstance(data, dict):
+
+        if not data:
+            logger.warning("YAML is empty or invalid. Using default config.")
+            return BatchProcessorConfig({})
+
+        if isinstance(data, dict) and 'config' in data:
             config_data = data.get('config', {})
-            
+        else:
+            # Possibly top-level list or unexpected structure
+            config_data = {}
+
         return BatchProcessorConfig(config_data)
-        
+
     except Exception as e:
         logger.error(f"Error loading batch configuration: {str(e)}")
-        # Return default configuration
         return BatchProcessorConfig({})
 
-def load_claims_from_yaml(yaml_file: str) -> List[Dict[str, Any]]:
-    """Load claims and their associated configurations from YAML file."""
-    logger.info(f"Loading claims from YAML file: {yaml_file}")
+def load_requests_from_yaml(yaml_file: str) -> List[Dict[str, Any]]:
+    """Load user requests from a YAML file."""
+    logger.info(f"Loading requests from YAML file: {yaml_file}")
     try:
         with open(yaml_file, 'r', encoding='utf-8') as f:
             data = yaml.safe_load(f)
-            
-        claims_data = []
-        if isinstance(data, list):
-            for item in data:
-                if 'claim' in item:
-                    claim_data = {
-                        'claim': item['claim'],
-                        'exclusion_criteria': item.get('exclusion_criteria', {}),
-                        'data_extraction_schema': item.get('data_extraction_schema', {}),  # Changed from information_extraction
-                        'config': item.get('config', {})
-                    }
-                    claims_data.append(claim_data)
-        elif isinstance(data, dict):
-            if 'claim' in data:
-                claims_data = [{
-                    'claim': data['claim'],
-                    'exclusion_criteria': data.get('exclusion_criteria', {}),
-                    'data_extraction_schema': data.get('data_extraction_schema', {}),  # Changed from information_extraction
-                    'config': data.get('config', {})
-                }]
-            elif 'claims' in data:
-                claims_data = data['claims']
-                
-        if not claims_data:
-            logger.warning("No valid claims found in YAML file.")
-            
-        return claims_data
-        
+
+        if not data:
+            logger.warning("No content in YAML.")
+            return []
+
+        # The user must place requests under "requests"
+        requests_data = []
+        if isinstance(data, dict) and 'requests' in data:
+            requests_data = data['requests']
+        else:
+            logger.warning("No 'requests' key found in YAML. Returning empty list.")
+
+        return requests_data
+
     except Exception as e:
-        logger.error(f"Error loading claims from YAML: {str(e)}")
+        logger.error(f"Error loading requests from YAML: {str(e)}")
         raise
 
-async def process_claims(claims_data: List[Dict[str, Any]], config: BatchProcessorConfig) -> Dict[str, Any]:
-    """Process a list of claims using the provided configuration."""
+async def process_requests(requests_data: List[Dict[str, Any]], config: BatchProcessorConfig) -> Dict[str, Any]:
+    """Process a list of requests using the provided configuration."""
     results = {}
-    
-    #print full claim data object's contents to console
-    logger.info(f"Full claim data object: {claims_data}")
-    
-    for claim_data in claims_data:
-        claim_text = claim_data.get('claim')
-        if not claim_text:
+    logger.info(f"Full requests data object: {requests_data}")
+
+    for req_data in requests_data:
+        query_text = req_data.get('query', '').strip()
+        ranking_text = req_data.get('ranking_guidance', '').strip()
+        if not query_text:
+            logger.warning("Skipping request with empty query.")
             continue
-            
+
+        # ID fallback
+        request_id = req_data.get('id', '')
+        if not request_id:
+            # fallback to first few words of query
+            request_id = "_".join(query_text.split()[:5]) or "unnamed_request"
+
         try:
-            # Process the claim - FIXED parameter name here
-            analysis = await analyze_claim(
-                claim=claim_text,
-                exclusion_criteria=claim_data.get('exclusion_criteria'),
-                data_extraction_schema=claim_data.get('data_extraction_schema'),  # FIXED: was 'extraction_schema'
-                num_queries=claim_data.get('config', {}).get('num_queries', config.num_queries),
-                papers_per_query=claim_data.get('config', {}).get('papers_per_query', config.papers_per_query),
-                num_papers_to_return=claim_data.get('config', {}).get('num_papers_to_return', config.num_papers_to_return)
+            # Analyze this request
+            analysis = await analyze_request(
+                query=query_text,
+                ranking_guidance=ranking_text,
+                exclusion_criteria=req_data.get('exclusion_criteria', {}),
+                data_extraction_schema=req_data.get('information_extraction', {}),
+                num_queries=req_data.get('config', {}).get('num_queries', config.num_queries),
+                papers_per_query=req_data.get('config', {}).get('papers_per_query', config.papers_per_query),
+                num_papers_to_return=req_data.get('config', {}).get('num_papers_to_return', config.num_papers_to_return)
             )
-            
-            if isinstance(analysis, ClaimAnalysis):
-                results[claim_text] = analysis.to_dict()
+
+            if isinstance(analysis, RequestAnalysis):
+                results[request_id] = analysis.to_dict()
             else:
-                results[claim_text] = analysis
-                
+                results[request_id] = analysis
+
         except Exception as e:
-            logger.error(f"Error analyzing claim '{claim_text[:100]}...': {str(e)}", exc_info=True)
-            results[claim_text] = {"error": str(e)}
-            
+            logger.error(f"Error analyzing request '{request_id}': {str(e)}", exc_info=True)
+            results[request_id] = {"error": str(e)}
+
     return results
 
 def extract_concise_results(results: Dict[str, Any], num_papers: int = 5) -> Dict[str, Any]:
-    """Extract concise results from analysis."""
+    """Extract concise results for each request."""
+    from .models import RequestAnalysis, RankedPaper
     concise_results = {}
-    
-    for claim, analysis in results.items():
-        # Debug logging
-        logger.debug(f"Processing claim: {claim}")
-        logger.debug(f"Analysis type: {type(analysis)}")
-        logger.debug(f"Analysis content: {analysis}")
-        
-        # Get ranked papers (handle both ClaimAnalysis objects and dicts)
-        if isinstance(analysis, ClaimAnalysis):
-            ranked_papers = analysis.get_top_papers(num_papers)
-        else:
-            ranked_papers = analysis.get('ranked_papers', [])
-            
+
+    for req_id, analysis_dict in results.items():
+        if not isinstance(analysis_dict, dict):
+            continue
+        # If we stored the data from a RequestAnalysis .to_dict(), attempt to replicate top N
+        ranked_papers = analysis_dict.get('ranked_papers', [])
+        all_params = analysis_dict.get('parameters', {})
+
+        # Just pick the first `num_papers` from the 'ranked_papers' array in that dict
+        top_papers = ranked_papers[:num_papers]
+
         concise_papers = []
-        
-        for paper in ranked_papers:
-            # Debug logging
-            logger.debug(f"Processing paper: {paper.title if hasattr(paper, 'title') else paper.get('title')}")
-            
+
+        for paper in top_papers:
             paper_dict = {
                 'title': getattr(paper, 'title', paper.get('title', 'Unknown')),
                 'authors': getattr(paper, 'authors', paper.get('authors', [])),
@@ -166,8 +155,7 @@ def extract_concise_results(results: Dict[str, Any], num_papers: int = 5) -> Dic
                 'analysis': getattr(paper, 'analysis', paper.get('analysis', '')),
                 'relevant_quotes': getattr(paper, 'relevant_quotes', paper.get('relevant_quotes', []))[:3]
             }
-            
-            # Add selection criteria and extraction results side by side
+
             if paper_dict['extraction_result']:
                 paper_dict['metrics'] = {
                     'dataset_size': paper_dict['extraction_result'].get('dataset_size', -1),
@@ -175,22 +163,23 @@ def extract_concise_results(results: Dict[str, Any], num_papers: int = 5) -> Dic
                     'methods_compared': paper_dict['extraction_result'].get('methods', 'N/A'),
                     'hardware': paper_dict['extraction_result'].get('hardware_specs', 'N/A')
                 }
-            
+
             if paper_dict['exclusion_criteria_result']:
                 paper_dict['criteria'] = {
                     'no_comparison': paper_dict['exclusion_criteria_result'].get('no_comparison', False),
                     'small_dataset': paper_dict['exclusion_criteria_result'].get('small_dataset', False)
                 }
-            
+
             concise_papers.append(paper_dict)
-            
-        concise_results[claim] = {
-            'claim': claim,
-            'papers': concise_papers,
+
+
+        concise_results[req_id] = {
+            'request_id': req_id,
+            'parameters': all_params,
+            'top_papers': concise_papers,
             'num_total_papers': len(ranked_papers),
-            'timestamp': analysis.timestamp if isinstance(analysis, ClaimAnalysis) else datetime.now().isoformat()
+            'timestamp': analysis_dict.get('timestamp', datetime.now().isoformat())
         }
-        
     return concise_results
 
 def sanitize_filename(name: str) -> str:
@@ -199,78 +188,63 @@ def sanitize_filename(name: str) -> str:
     name = re.sub(r'[<>:"/\\|?*]', '_', name)
     name = re.sub(r'[\s_]+', '_', name)
     name = name.strip('. ')
-    return name if name else 'unnamed_claim'
+    return name if name else 'unnamed_request'
 
-def batch_analyze_claims(yaml_file: str) -> None:
-    """Process multiple claims in batch using configuration from YAML file."""
+def batch_analyze_requests(yaml_file: str) -> None:
+    """Process multiple requests in batch using configuration from a YAML file."""
     try:
-        # Get YAML directory and create output folder
         yaml_dir = os.path.dirname(os.path.abspath(yaml_file))
         yaml_name = os.path.splitext(os.path.basename(yaml_file))[0]
         output_dir = os.path.join(yaml_dir, f"{yaml_name}_results")
         os.makedirs(output_dir, exist_ok=True)
-        
-        # Load configuration
+
         config = load_batch_config(yaml_file)
-        
-        # Configure logging
         configure_logging(
             log_file=os.path.join(output_dir, 'batch_process.log'),
             console_level=config.log_level
         )
-        
-        logger.info("Starting batch analysis of claims.")
+
+        logger.info("Starting batch analysis of requests.")
         logger.info(f"Results will be saved in: {output_dir}")
-        
-        claims_data = load_claims_from_yaml(yaml_file)
-        if not claims_data:
-            logger.warning("No claims to process. Exiting.")
+
+        requests_data = load_requests_from_yaml(yaml_file)
+        if not requests_data:
+            logger.warning("No requests to process. Exiting.")
             return
-            
-        results = asyncio.run(process_claims(claims_data, config))
+
+        results = asyncio.run(process_requests(requests_data, config))
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        
-        # Process each claim's results
-        for claim_data in claims_data:
-            claim_text = claim_data.get('claim', '')
-            if not claim_text:
+
+        # Save each request's results
+        for req_data in requests_data:
+            query_text = req_data.get('query', '').strip()
+            if not query_text:
                 continue
-                
-            # Get claim identifier
-            claim_id = claim_data.get('id', '')
-            if not claim_id:
-                claim_id = sanitize_filename(' '.join(claim_text.split()[:5]))
-            
-            # Get number of papers to return for concise results
-            claim_config = claim_data.get('config', {})
-            num_papers = claim_config.get('num_papers_to_return', 
-                                        config.num_papers_to_return)
-            
-            # Extract this claim's results
-            claim_results = {claim_text: results[claim_text]} if claim_text in results else {}
-            
-            # Log the full results before processing
-            if claim_results:
-                logger.info(f"Full results for claim before processing: {claim_results}")
-            
-            concise_results = extract_concise_results(claim_results, num_papers)
-            
-            # Log the concise results
-            if concise_results:
-                logger.info(f"Concise results for claim: {concise_results}")
-            
-            # Generate filenames with claim ID
-            base_filename = f"{claim_id}_{timestamp}"
-            
-            # Save results
+            request_id = req_data.get('id', '')
+            if not request_id:
+                request_id = "_".join(query_text.split()[:5]) or "unnamed_request"
+            request_id = sanitize_filename(request_id)
+
+            # Determine how many top papers for concise results
+            req_conf = req_data.get('config', {})
+            num_papers = req_conf.get('num_papers_to_return', config.num_papers_to_return)
+
+            if request_id not in results:
+                logger.warning(f"No results found for '{request_id}' - skipping file creation.")
+                continue
+
+            full_result = {request_id: results[request_id]}
+            concise_result = extract_concise_results(full_result, num_papers)
+
+            base_filename = f"{request_id}_{timestamp}"
             with open(os.path.join(output_dir, f"{base_filename}_full.json"), 'w', encoding='utf-8') as f:
-                json.dump(claim_results, f, ensure_ascii=False, indent=2, default=str)
-            
+                json.dump(full_result, f, ensure_ascii=False, indent=2, default=str)
+
             with open(os.path.join(output_dir, f"{base_filename}.json"), 'w', encoding='utf-8') as f:
-                json.dump(concise_results, f, ensure_ascii=False, indent=2, default=str)
-                
-            logger.info(f"Saved results for claim '{claim_id}'")
-        
+                json.dump(concise_result, f, ensure_ascii=False, indent=2, default=str)
+
+            logger.info(f"Saved results for request '{request_id}'")
+
     except Exception as e:
         logger.error(f"Batch processing failed: {str(e)}", exc_info=True)
     finally:
@@ -278,4 +252,4 @@ def batch_analyze_claims(yaml_file: str) -> None:
 
 
 if __name__ == "__main__":
-    batch_analyze_claims(r"C:\Users\bryan\OneDrive\Documents\Projects\ACADEMIC LITERATURE UTILITIES\academic-claim-analyzer\CLAIMS\test.yaml")
+    batch_analyze_requests(r"C:\Users\bryan\OneDrive\Documents\Projects\ACADEMIC LITERATURE UTILITIES\academic-claim-analyzer\CLAIMS\test.yaml")

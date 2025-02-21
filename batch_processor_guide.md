@@ -1,69 +1,74 @@
-# Batch Processing Guide: Analyzing Multiple Academic Claims
+# Batch Processing Guide: Analyzing Multiple Research Requests
 
 ## Overview
 
-The batch processor allows you to analyze multiple academic claims simultaneously, providing comprehensive evidence gathering and analysis. For each claim, you can specify:
+The batch processor allows you to analyze multiple research requests simultaneously, providing comprehensive evidence gathering and analysis. For each request, you can specify:
+- **`query`**: The natural-language research question or topic you’re investigating.
+- **`ranking_guidance`**: A string (short or long) telling the ranker how to prioritize papers (e.g., “focus on recent empirical studies,” or “prioritize theoretical frameworks”).
 - Exclusion criteria to systematically filter out irrelevant papers
 - Information extraction schemas to pull structured data from relevant papers
-- Claim-specific processing parameters
+- Request-specific processing parameters
 
 The system will:
 1. Generate optimized search queries across academic databases
 2. Retrieve and analyze relevant papers
 3. Apply your exclusion criteria if specified
 4. Extract structured information if requested
-5. Rank papers by relevance to the claim
+5. Rank papers by relevance to the request, guided by your ranking instructions
 6. Provide both detailed and concise analysis outputs
 
 ## Basic Usage
 
 ```python
-from academic_claim_analyzer import batch_analyze_claims
+from academic_claim_analyzer import batch_analyze_requests
 
-# Process claims from a YAML file
-batch_analyze_claims("path/to/claims.yaml")
+# Process requests from a YAML file
+batch_analyze_requests("path/to/requests.yaml")
 ```
 
-Results will be automatically organized in a folder named after your YAML file (e.g., `claims_results/`) in the same directory as your YAML file.
+Results will be automatically organized in a folder named after your YAML file (e.g., `requests_results/`) in the same directory as your YAML file.
 
 ## YAML Structure
 
 Your YAML file should contain:
 1. Global configuration for processing parameters
-2. One or more claims with their associated criteria and schemas
+2. One or more requests with their associated criteria and schemas
 
 ### 1. Global Configuration
 ```yaml
 config:
   processing:
-    num_queries: 5         # Number of search queries per claim
+    num_queries: 5         # Number of search queries per request
     papers_per_query: 7    # Papers to retrieve per query
     num_papers_to_return: 3  # Top papers to include in concise results
-  
+
   logging:
     level: INFO           # Logging detail level (INFO, DEBUG, WARNING, ERROR)
-  
+
   search:
-    platforms:           # Search platforms to use
+    platforms:
       - openalex
       - scopus
       - core
+      - arxiv
     min_year: 2010      # Optional year filtering
     max_year: 2024
 ```
 
-### 2. Simple Claim
+### 2. Simple Request
 ```yaml
-claims:
-  - id: basic_claim      # Optional identifier for result files
-    claim: "Machine learning improves crop yield predictions"
+requests:
+  - id: basic_request      # Optional identifier for result files
+    query: "Machine learning improves crop yield predictions"
+    ranking_guidance: "Rank papers primarily by relevance to the query."
 ```
 
-### 3. Claim with Exclusion Criteria
+### 3. Request with Exclusion Criteria
 ```yaml
-claims:
+requests:
   - id: ml_yield
-    claim: "Machine learning improves crop yield predictions"
+    query: "Machine learning improves crop yield predictions"
+    ranking_guidance: "Prioritize papers with empirical results."
     exclusion_criteria:
       no_empirical:
         type: boolean
@@ -79,11 +84,12 @@ The exclusion criteria are used to filter out papers. Any paper matching ANY of 
 - Include a clear description of what constitutes exclusion
 - Be objectively evaluable from paper content
 
-### 4. Claim with Information Extraction
+### 4. Request with Information Extraction
 ```yaml
-claims:
+requests:
   - id: ml_yield
-    claim: "Machine learning improves crop yield predictions"
+    query: "Machine learning improves crop yield predictions"
+    ranking_guidance: "Focus on papers that quantify prediction accuracy."
     information_extraction:
       accuracy:
         type: float
@@ -116,22 +122,24 @@ config:
     num_queries: 5
     papers_per_query: 7
     num_papers_to_return: 3
-  
+
   logging:
     level: INFO
-  
+
   search:
     platforms:
       - openalex
       - scopus
       - core
+      - arxiv
     min_year: 2010
     max_year: 2024
 
-claims:
+requests:
   - id: deep_learning_crops
-    claim: "Deep learning outperforms traditional methods in crop disease detection"
-    config:              # Claim-specific processing overrides
+    query: "Deep learning outperforms traditional methods in crop disease detection"
+    ranking_guidance: "Prioritize papers with comparative studies and performance metrics."
+    config:              # Request-specific processing overrides
       num_papers_to_return: 5
     exclusion_criteria:
       no_comparison:
@@ -155,7 +163,8 @@ claims:
         description: "Computing resources used"
 
   - id: iot_irrigation
-    claim: "IoT sensor networks improve irrigation efficiency"
+    query: "IoT sensor networks improve irrigation efficiency"
+    ranking_guidance: "Rank based on real-world implementations and quantified water savings."
     exclusion_criteria:
       theoretical_only:
         type: boolean
@@ -177,13 +186,13 @@ claims:
 
 ## Output Structure and Organization
 
-The batch processor creates a results folder named after your YAML file and generates two types of JSON files for each claim:
+The batch processor creates a results folder named after your YAML file and generates two types of JSON files for each request:
 
-### 1. Concise Results (`{claim_id}_{timestamp}.json`)
+### 1. Concise Results (`{request_id}_{timestamp}.json`)
 Contains only the top N papers (specified by num_papers_to_return) with essential information:
 ```json
 {
-  "claim_text": {
+  "request_text": {
     "ranked_papers": [
       {
         "title": "Paper title",
@@ -192,9 +201,9 @@ Contains only the top N papers (specified by num_papers_to_return) with essentia
         "bibtex": "Complete BibTeX citation",
         "relevant_quotes": [
           "Key quote demonstrating relevance",
-          "Important finding supporting claim"
+          "Important finding supporting request"
         ],
-        "analysis": "Detailed analysis of paper's relevance to claim",
+        "analysis": "Detailed analysis of paper's relevance to request",
         "exclusion_criteria_result": {
           "no_empirical": false,
           "insufficient_data": false
@@ -212,7 +221,7 @@ Contains only the top N papers (specified by num_papers_to_return) with essentia
 }
 ```
 
-### 2. Full Results (`{claim_id}_{timestamp}_full.json`)
+### 2. Full Results (`{request_id}_{timestamp}_full.json`)
 Contains complete analysis data including:
 - All papers found, not just top N
 - Search queries used
@@ -222,10 +231,10 @@ Contains complete analysis data including:
 - All analysis details
 
 ### Example Directory Structure
-For a YAML file named `agriculture_claims.yaml`:
+For a YAML file named `agriculture_requests.yaml`:
 ```
-agriculture_claims.yaml
-agriculture_claims_results/
+agriculture_requests.yaml
+agriculture_requests_results/
   ├── batch_process.log
   ├── deep_learning_crops_20241027_123456.json      # Concise results
   ├── deep_learning_crops_20241027_123456_full.json # Full results
@@ -262,8 +271,8 @@ When you specify an extraction schema:
 1. System analyzes full paper text to find requested information
 2. Data is extracted and validated against specified types
 3. All extracted values are included in results
-4. Use this to gather specific evidence for your claim
-5. Schema should target key information needed for claim validation
+4. Use this to gather specific evidence for your request
+5. Schema should target key information needed for request validation
 
 Example thought process for extraction:
 ```yaml

@@ -1,0 +1,13 @@
+{
+  "combined_features_request": {
+    "request_id": "combined_features_request",
+    "parameters": {
+      "num_queries": 2,
+      "papers_per_query": 3,
+      "num_papers_to_return": 2
+    },
+    "top_papers": [],
+    "num_total_papers": 0,
+    "timestamp": "2025-02-21T22:53:33.597077"
+  }
+}

@@ -1,0 +1,141 @@
+{
+  "config_override_request": {
+    "query": "Sustainable irrigation techniques for rice cultivation",
+    "ranking_guidance": "Emphasize papers that discuss water-saving technologies in rice farming.",
+    "timestamp": "2025-02-21T22:46:57.016726",
+    "parameters": {
+      "num_queries": 2,
+      "papers_per_query": 3,
+      "num_papers_to_return": 4
+    },
+    "queries": [
+      {
+        "query": "%22sustainable+irrigation%22+AND+%22rice+cultivation%22",
+        "source": "openalex",
+        "timestamp": "2025-02-21 22:46:58.016800"
+      },
+      {
+        "query": "%22water+saving+irrigation%22+AND+%22rice+paddy%22",
+        "source": "openalex",
+        "timestamp": "2025-02-21 22:46:58.016800"
+      },
+      {
+        "query": "TITLE-ABS-KEY((\"sustainable irrigation\" OR \"efficient irrigation\") AND (rice OR paddy) AND (water management OR water saving))",
+        "source": "scopus",
+        "timestamp": "2025-02-21 22:46:59.316194"
+      },
+      {
+        "query": "TITLE-ABS-KEY((rice OR paddy) AND (irrigation W/10 (strategy OR technique OR method)) AND (sustainab* OR efficien* OR conserv*))",
+        "source": "scopus",
+        "timestamp": "2025-02-21 22:46:59.316194"
+      },
+      {
+        "query": "all:sustainable irrigation rice cultivation",
+        "source": "arxiv",
+        "timestamp": "2025-02-21 22:46:59.963710"
+      },
+      {
+        "query": "all:water saving irrigation methods rice",
+        "source": "arxiv",
+        "timestamp": "2025-02-21 22:46:59.963710"
+      },
+      {
+        "query": "title:(\"sustainable irrigation\" OR \"water-saving irrigation\" OR \"efficient irrigation\") AND abstract:(\"rice cultivation\" OR \"rice farming\" OR \"paddy field\")",
+        "source": "core",
+        "timestamp": "2025-02-21 22:47:01.327379"
+      },
+      {
+        "query": "title:(\"irrigation techniques\" AND \"rice\") AND abstract:(\"water management\" OR \"water conservation\" OR \"deficit irrigation\") AND abstract:(\"rice yield\" OR \"rice quality\")",
+        "source": "core",
+        "timestamp": "2025-02-21 22:47:01.327379"
+      }
+    ],
+    "ranked_papers": [
+      {
+        "title": "Evaluation of resource and energy utilization, environmental and economic benefits of rice water-saving irrigation technologies in a rice-wheat rotation system",
+        "authors": [
+          "Chen Z.",
+          "Li P.",
+          "Jiang S.",
+          "Chen H.",
+          "Wang J.",
+          "Cao C."
+        ],
+        "year": 2021,
+        "relevance_score": 0.8500000000000001,
+        "analysis": "This paper evaluates the resource, energy, environmental, and economic benefits of rice water-saving irrigation technologies in a rice-wheat rotation system. It compares conventional flooding irrigation with intermittent irrigation, transplanting rain-fed, and rice dry cultivation techniques. The methodology involves field experiments conducted over several years, measuring various parameters such as global warming potential, grain yield, economic benefits, water productivity, and energy use efficiency. The paper finds that rice dry cultivation and wheat rotation systems offer higher comprehensive benefits, particularly in terms of water productivity and economic returns. A limitation of the study is its specific geographic location, which might limit the generalizability of the findings. However, it is directly relevant to the research query as it explicitly investigates and compares different sustainable irrigation techniques for rice cultivation, emphasizing water-saving technologies as requested.",
+        "relevant_quotes": [
+          "Rice dry cultivation and wheat rotation system has higher comprehensive benefits.",
+          "Water productivity and economic benefit contribute greatly to comprehensive benefits.",
+          "Rice dry cultivation better coordinates water productivity and other benefits.",
+          "Rice dry cultivation optimizes economic benefit and reduces global warming potential.",
+          "Rice dry cultivation enhances resource, environmental and economic benefits of wheat."
+        ],
+        "extraction_result": null,
+        "exclusion_criteria_result": null
+      },
+      {
+        "title": "Water-saving irrigation is a ‘win-win’ management strategy in rice paddies – With both reduced greenhouse gas emissions and enhanced water use efficiency",
+        "authors": [
+          "Wang H.",
+          "Zhang Y.",
+          "Zhang Y.",
+          "McDaniel M.D.",
+          "Sun L.",
+          "Su W.",
+          "Fan X.",
+          "Liu S.",
+          "Xiao X."
+        ],
+        "year": 2020,
+        "relevance_score": 0.8249999999999998,
+        "analysis": "This paper investigates the effectiveness of water-saving irrigation techniques, specifically Alternate Wetting and Drying (AWD), in rice paddies. The methodology involves field experiments comparing AWD with conventional flooding irrigation (FDF) under varying nitrogen fertilizer application rates. The evidence presented is strong, with statistical analyses (ANOVA) used to assess the impact on greenhouse gas emissions, global warming potential, greenhouse gas intensity, grain yield, and water use efficiency (WUE). A key limitation is the specific study site and environmental conditions, which may limit the generalizability of the findings. The paper is directly relevant to the research query, as it examines a specific sustainable irrigation technique (AWD) for rice cultivation and evaluates its impact on WUE, aligning with the user's emphasis on water-saving technologies. The results suggest AWD can enhance WUE while reducing greenhouse gas emissions under certain conditions, making it a valuable contribution to the field.",
+        "relevant_quotes": [
+          "AWD irrigation decreased GWP and GHGI but enhanced WUE compared with FDF in rice paddies.",
+          "The highest grain yield occurred in AWD with medium N application rate.",
+          "AWD irrigation significantly reduced CH4 emissions but increased N2O emissions during rice growing season."
+        ],
+        "extraction_result": null,
+        "exclusion_criteria_result": null
+      },
+      {
+        "title": "Assessment of water conservation technique in rice culture to develop water use policies",
+        "authors": [
+          "Kongchum, Manoch"
+        ],
+        "year": 2005,
+        "relevance_score": 0.7999999999999999,
+        "analysis": "This master's thesis investigates water conservation techniques in rice production, specifically comparing alternate flooding and drying to continuous flooding. The study found that alternate flooding and drying reduced water use by 13-29% and increased rice grain yield by 33-36%. The research directly addresses the research query on sustainable irrigation techniques for rice cultivation and aligns with the user's emphasis on water-saving technologies. The thesis provides quantitative data on water use reduction and yield improvements, offering valuable insights for developing water use policies. However, being a single thesis, the generalizability of the results might be limited without broader validation across different regions and rice varieties.",
+        "relevant_quotes": [
+          "The alternate flooding and drying treatment reduced water use by 13-29 percent and increased rice grain yield by 33-36 percent.",
+          "Hence, this thesis was designed to investigate water conservation possibilities for rice production in two water management regimes: alternate flooding and drying, and continuous flooding (the latter is the traditional water management technique in irrigated rice culture).",
+          "Results demonstrate that there is great potential to increase water use efficiency in wetland rice culture without reducing rice grain yield."
+        ],
+        "extraction_result": null,
+        "exclusion_criteria_result": null
+      },
+      {
+        "title": "Impact of water saving irrigation systems on water use, growth and yield of irrigated lowland rice",
+        "authors": [
+          "Piyasiri, C. H.",
+          "Priyadarshani, T. N. N.",
+          "Silva, L. S.",
+          "Weerakoon, W. M. W."
+        ],
+        "year": 2012,
+        "relevance_score": 0.7499999999999999,
+        "analysis": "This paper directly addresses the research query on sustainable irrigation techniques for rice cultivation. The study compares different water management techniques (standing water, flood to saturate, saturate to dry, and saturate throughout) on lowland rice in Sri Lanka, evaluating their impact on water use, growth, and yield. The methodology involves a randomized complete block design with multiple treatments and careful measurement of water input, plant growth parameters, and grain yield. The evidence appears strong, with statistical analysis (ANOVA) used to support the conclusions. A limitation is that the study focuses on a specific region (intermediate zone of Sri Lanka) and soil types, which might limit the generalizability of the findings. The paper is highly relevant due to its direct comparison of water-saving irrigation techniques and their effects on rice production. It emphasizes techniques that minimize water use without sacrificing yield, aligning with the user's guidance to prioritize water-saving technologies.",
+        "relevant_quotes": [
+          "Conserving irrigation water would increase the cultivated extent of land while reducing the probability of late season water-stress in the cultivated rice crop.",
+          "These findings suggest that when soil water is maintained at a saturated level in lowland rice, a considerable amount of irrigation water could be saved without sacrificing grain yield.",
+          "This experiment shows that about 24 – 35 % and 70 % irrigation water could be saved during the yala and maha seasons, respectively, if the field is either maintained at saturated condition or saturate to dry situation.",
+          "In general, maintaining saturated soil culture in lowland rice paddies could save irrigation water requirement while maintaining the same or even a greater level of grain yield when compared to the flooded system.",
+          "Saturated soil culture significantly decreased irrigation water use while maintaining the same level of yield."
+        ],
+        "extraction_result": null,
+        "exclusion_criteria_result": null
+      }
+    ],
+    "metadata": {}
+  }
+}

@@ -8,29 +8,34 @@ from pydantic import BaseModel, Field, create_model
 from .query_formulator import formulate_queries
 from .paper_ranker import rank_papers, llm_handler, get_model_or_default, DEFAULT_LLM_MODEL
 from .search import OpenAlexSearch, ScopusSearch, CORESearch, ArxivSearch, BaseSearch
-from .models import ClaimAnalysis, Paper, RankedPaper
+from .models import RequestAnalysis, Paper, RankedPaper
 
 logger = logging.getLogger(__name__)
 
-async def analyze_claim(
-    claim: str,
+async def analyze_request(
+    query: str,
+    ranking_guidance: str = "",
     exclusion_criteria: Optional[Dict[str, Any]] = None,
     data_extraction_schema: Optional[Dict[str, Any]] = None,
     num_queries: int = 2,
     papers_per_query: int = 2,
     num_papers_to_return: int = 2
-) -> ClaimAnalysis:
+) -> RequestAnalysis:
     """
-    Analyze a claim and return results. This function:
-      1) Formulates queries (for scopus & openalex)
-      2) Searches across different platforms (including arXiv, CORE, etc.)
-      3) Applies exclusion criteria
-      4) Ranks papers
+    Analyze a user's research request. This includes:
+      1) Formulating queries for multiple platforms (Scopus, OpenAlex, arXiv, etc.)
+      2) Searching and fetching papers
+      3) Applying exclusion criteria
+      4) Ranking papers using the provided ranking guidance
+      5) Extracting requested information
     """
-    logger.info(f"Analyzing claim with exclusion criteria: {exclusion_criteria}")
+    logger.info(f"Analyzing request with exclusion criteria: {exclusion_criteria}")
     logger.info(f"Data extraction schema: {data_extraction_schema}")
-    analysis = ClaimAnalysis(
-        claim=claim,
+    logger.info(f"Ranking guidance: {ranking_guidance}")
+
+    analysis = RequestAnalysis(
+        query=query,
+        ranking_guidance=ranking_guidance,
         parameters={
             "num_queries": num_queries,
             "papers_per_query": papers_per_query,
@@ -50,7 +55,7 @@ async def analyze_claim(
 
         await _perform_analysis(analysis)
     except Exception as e:
-        logger.error(f"Error during claim analysis: {str(e)}", exc_info=True)
+        logger.error(f"Error during request analysis: {str(e)}", exc_info=True)
         analysis.metadata["error"] = str(e)
 
     return analysis
@@ -58,7 +63,7 @@ async def analyze_claim(
 def create_model_from_schema(model_name: str, schema: Dict[str, Any]) -> Type[BaseModel]:
     """
     Dynamically create a Pydantic model from a dictionary schema describing fields
-    and their types. 
+    and their types.
     """
     annotations = {}
     fields = {}
@@ -83,9 +88,9 @@ def create_model_from_schema(model_name: str, schema: Dict[str, Any]) -> Type[Ba
             description += " (Must be true/false)"
             default_value = False
             json_type = 'boolean'
-        elif field_type == 'array':
-            from typing import List
-            python_type = List[str]
+        elif field_type == 'array' or field_type == 'list':
+            from typing import List as PyList
+            python_type = PyList[str]
             description += " (List of strings, empty if none)"
             default_value = []
             json_type = 'array'
@@ -126,7 +131,7 @@ def create_model_from_schema(model_name: str, schema: Dict[str, Any]) -> Type[Ba
 
     return type(model_name, (BaseModel,), namespace)
 
-async def _perform_analysis(analysis: ClaimAnalysis) -> None:
+async def _perform_analysis(analysis: RequestAnalysis) -> None:
     """Execute the full analysis pipeline: queries -> search -> exclusion -> rank."""
     await _formulate_queries(analysis)
     await _perform_searches(analysis)
@@ -134,36 +139,57 @@ async def _perform_analysis(analysis: ClaimAnalysis) -> None:
         await _apply_exclusion_criteria(analysis)
         await _rank_papers(analysis)
 
-async def _formulate_queries(analysis: ClaimAnalysis) -> None:
-    """Generate search queries for different platforms (scopus, openalex)."""
+async def _formulate_queries(analysis: RequestAnalysis) -> None:
+    """Generate search queries for different platforms (OpenAlex, Scopus, Arxiv)."""
     try:
+        # OpenAlex
         openalex_queries = await formulate_queries(
-            analysis.claim,
+            analysis.query,
             analysis.parameters["num_queries"],
             "openalex"
         )
+        for q in openalex_queries:
+            analysis.add_query(q, "openalex")
+
+        # Scopus
         scopus_queries = await formulate_queries(
-            analysis.claim,
+            analysis.query,
             analysis.parameters["num_queries"],
             "scopus"
         )
-
-        for q in openalex_queries:
-            analysis.add_query(q, "openalex")
         for q in scopus_queries:
             analysis.add_query(q, "scopus")
+
+        # arXiv
+        arxiv_queries = await formulate_queries(
+            analysis.query,
+            analysis.parameters["num_queries"],
+            "arxiv"
+        )
+        for q in arxiv_queries:
+            analysis.add_query(q, "arxiv")
+
+        # CORE (optionally, some want to pass raw or do the same approach)
+        # For consistency, let's also do re-formulation for CORE:
+        core_queries = await formulate_queries(
+            analysis.query,
+            analysis.parameters["num_queries"],
+            "core"
+        )
+        for q in core_queries:
+            analysis.add_query(q, "core")
 
     except Exception as e:
         logger.error(f"Error formulating queries: {str(e)}", exc_info=True)
         raise
 
-async def _perform_searches(analysis: ClaimAnalysis) -> None:
-    """Execute searches across different platforms: openalex, scopus, CORE, arXiv."""
+async def _perform_searches(analysis: RequestAnalysis) -> None:
+    """Execute searches across different platforms: openalex, scopus, core, arxiv."""
     search_tasks = []
     papers_per_query = analysis.parameters["papers_per_query"]
 
     try:
-        # 1) OpenAlex
+        # OpenAlex
         openalex_search = OpenAlexSearch("youremail@example.com")
         openalex_queries = [q for q in analysis.queries if q.source == "openalex"]
         for query in openalex_queries:
@@ -171,7 +197,7 @@ async def _perform_searches(analysis: ClaimAnalysis) -> None:
                 _search_and_add_results(openalex_search, query.query, papers_per_query, analysis)
             )
 
-        # 2) Scopus
+        # Scopus
         scopus_search = ScopusSearch()
         scopus_queries = [q for q in analysis.queries if q.source == "scopus"]
         for query in scopus_queries:
@@ -179,17 +205,21 @@ async def _perform_searches(analysis: ClaimAnalysis) -> None:
                 _search_and_add_results(scopus_search, query.query, papers_per_query, analysis)
             )
 
-        # 3) CORE (always pass the raw claim)
+        # CORE
         core_search = CORESearch()
-        search_tasks.append(
-            _search_and_add_results(core_search, analysis.claim, papers_per_query, analysis)
-        )
+        core_queries = [q for q in analysis.queries if q.source == "core"]
+        for query in core_queries:
+            search_tasks.append(
+                _search_and_add_results(core_search, query.query, papers_per_query, analysis)
+            )
 
-        # 4) arXiv (always pass the raw claim)
+        # arXiv
         arxiv_search = ArxivSearch()
-        search_tasks.append(
-            _search_and_add_results(arxiv_search, analysis.claim, papers_per_query, analysis)
-        )
+        arxiv_queries = [q for q in analysis.queries if q.source == "arxiv"]
+        for query in arxiv_queries:
+            search_tasks.append(
+                _search_and_add_results(arxiv_search, query.query, papers_per_query, analysis)
+            )
 
         await asyncio.gather(*search_tasks)
 
@@ -201,7 +231,7 @@ async def _search_and_add_results(
     search_module: BaseSearch,
     query: str,
     limit: int,
-    analysis: ClaimAnalysis
+    analysis: RequestAnalysis
 ) -> None:
     """Run a single search and add results to the analysis."""
     try:
@@ -213,8 +243,8 @@ async def _search_and_add_results(
     except Exception as e:
         logger.error(f"Error during search with {search_module.__class__.__name__}: {str(e)}")
 
-async def _apply_exclusion_criteria(analysis: ClaimAnalysis) -> None:
-    """Apply LLM-based exclusion criteria and data extraction to the search results."""
+async def _apply_exclusion_criteria(analysis: RequestAnalysis) -> None:
+    """Apply LLM-based exclusion criteria and data extraction to search results."""
     if not analysis.exclusion_schema and not analysis.data_extraction_schema:
         logger.info("No exclusion or extraction schema provided. Skipping.")
         return
@@ -237,16 +267,17 @@ async def _apply_exclusion_criteria(analysis: ClaimAnalysis) -> None:
             extraction_result={}
         )
         prompt_text = f"""
-            Assess the following academic paper against the specified exclusion criteria and data extraction requirements:
+Assess the following academic paper against the specified exclusion criteria and data extraction requirements.
 
-            Title: {rp.title}
-            Full Text: {rp.full_text}
+Title: {rp.title}
+Full Text: {rp.full_text}
 
-            Return a JSON object that exactly matches the fields defined in the provided schema. Include all required fields:
-            - For exclusion criteria (if any), use boolean values (true/false) to indicate if the paper meets each condition.
-            - For data extraction (if any), provide the requested values based on the full text, using default values (-1 for numbers, 'N/A' for strings, etc.) if information is missing or unclear.
-            Ensure the JSON structure aligns with the schema and includes no additional fields.
-            """
+Return a JSON object that exactly matches these fields:
+Exclusion criteria fields (boolean) => exclude if any is true.
+Extraction fields => fill with appropriate data.
+
+Here is the schema: {CombinedSchema.model_json_schema()}
+"""
         prompts.append(prompt_text)
         ranked_papers.append(rp)
 
@@ -278,7 +309,6 @@ async def _apply_exclusion_criteria(analysis: ClaimAnalysis) -> None:
                 if hasattr(schema_obj, f):
                     val = getattr(schema_obj, f)
                     exclusion_result[f] = val
-                    # if it's a boolean True => exclude
                     if isinstance(val, bool) and val:
                         exclude = True
 
@@ -293,7 +323,7 @@ async def _apply_exclusion_criteria(analysis: ClaimAnalysis) -> None:
         if not exclude:
             filtered.append(ranked_paper)
         else:
-            logger.info(f"Paper excluded based on criteria: {ranked_paper.title}")
+            logger.info(f"Paper excluded: {ranked_paper.title}")
 
     analysis.search_results = filtered
 
@@ -321,6 +351,7 @@ def create_combined_schema(
         for name, field in extraction_schema.model_fields.items():
             annotations[name] = field.annotation
             fields[name] = Field(description=field.description or f"Extraction: {name}")
+            # map to JSON types
             if field.annotation == int:
                 json_type = 'integer'
             elif field.annotation == float:
@@ -349,7 +380,7 @@ def create_combined_schema(
 
     return type("CombinedSchema", (BaseModel,), namespace)
 
-async def _rank_papers(analysis: ClaimAnalysis) -> None:
+async def _rank_papers(analysis: RequestAnalysis) -> None:
     """Rank the papers using the paper_ranker module."""
     if not analysis.search_results:
         logger.warning("No papers to rank.")
@@ -357,7 +388,8 @@ async def _rank_papers(analysis: ClaimAnalysis) -> None:
     try:
         ranked_list = await rank_papers(
             papers=analysis.search_results,
-            claim=analysis.claim,
+            query=analysis.query,
+            ranking_guidance=analysis.ranking_guidance,
             exclusion_schema=analysis.exclusion_schema,
             data_extraction_schema=analysis.data_extraction_schema,
             top_n=analysis.parameters["num_papers_to_return"]

@@ -8,7 +8,6 @@ class FlexibleNumericField:
     """Mixin for handling numeric fields that may come back as text."""
     @classmethod
     def convert_to_int(cls, v: Any) -> int:
-        """Convert any non-integer input to -1."""
         if isinstance(v, int):
             return v
         return -1
@@ -17,7 +16,7 @@ class SearchQuery(BaseModel):
     query: str
     source: str
     timestamp: datetime = Field(default_factory=datetime.utcnow)
-        
+
     class Config:
         json_encoders = {
             datetime: lambda v: v.isoformat()
@@ -43,7 +42,6 @@ class Paper(BaseModel, FlexibleNumericField):
         if v is None:
             return -1
         val = cls.convert_to_int(v)
-        # Basic sanity check for years
         if val < 1900 or val > 2100:
             return -1
         return val
@@ -69,12 +67,14 @@ class RankedPaper(Paper):
             return 0.0
         try:
             score = float(v)
-            return max(0.0, min(1.0, score))  # Clamp between 0 and 1
+            return max(0.0, min(1.0, score))  # clamp to [0..1]
         except (ValueError, TypeError):
             return 0.0
 
-class ClaimAnalysis(BaseModel):
-    claim: str
+class RequestAnalysis(BaseModel):
+    """Replaces the old 'ClaimAnalysis' with a more general request-based approach."""
+    query: str
+    ranking_guidance: str = ""
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     parameters: Dict[str, Any] = Field(default_factory=dict)
     queries: List[SearchQuery] = Field(default_factory=list)
@@ -82,7 +82,7 @@ class ClaimAnalysis(BaseModel):
     ranked_papers: List[RankedPaper] = Field(default_factory=list)
     metadata: Dict[str, Any] = Field(default_factory=dict)
     exclusion_schema: Optional[Type[BaseModel]] = None
-    data_extraction_schema: Optional[Type[BaseModel]] = None  # Changed from extraction_schema
+    data_extraction_schema: Optional[Type[BaseModel]] = None
 
     class Config:
         json_encoders = {
@@ -94,8 +94,7 @@ class ClaimAnalysis(BaseModel):
         self.queries.append(SearchQuery(query=query, source=source))
 
     def add_search_result(self, paper: Paper):
-        """Add search result with deduplication."""
-        # Simple deduplication based on title
+        """Add search result with deduplication (by title)."""
         existing_titles = {p.title.lower().strip() for p in self.search_results}
         if paper.title.lower().strip() not in existing_titles:
             self.search_results.append(paper)
@@ -110,14 +109,15 @@ class ClaimAnalysis(BaseModel):
         """Get top n papers sorted by relevance score."""
         return sorted(
             self.ranked_papers,
-            key=lambda x: x.relevance_score or 0,
+            key=lambda x: x.relevance_score or 0.0,
             reverse=True
         )[:n]
 
     def to_dict(self) -> Dict[str, Any]:
-        """Convert to dictionary with proper handling of all fields."""
+        """Convert to dictionary with relevant fields."""
         return {
-            'claim': self.claim,
+            'query': self.query,
+            'ranking_guidance': self.ranking_guidance,
             'timestamp': self.timestamp.isoformat(),
             'parameters': self.parameters,
             'queries': [q.model_dump() for q in self.queries],
@@ -134,13 +134,13 @@ class ClaimAnalysis(BaseModel):
                             'value': value,
                             'description': self.data_extraction_schema.model_fields[field].description
                         } for field, value in p.extraction_result.items()
-                    } if p.extraction_result else None,
+                    } if self.data_extraction_schema and p.extraction_result else None,
                     'exclusion_criteria_result': {
                         field: {
                             'value': value,
                             'description': self.exclusion_schema.model_fields[field].description
                         } for field, value in p.exclusion_criteria_result.items()
-                    } if p.exclusion_criteria_result else None,
+                    } if self.exclusion_schema and p.exclusion_criteria_result else None,
                 }
                 for p in self.get_top_papers(5)
             ],

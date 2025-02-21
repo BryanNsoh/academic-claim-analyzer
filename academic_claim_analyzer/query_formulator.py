@@ -95,68 +95,90 @@ Example Searches
 }
 """
 
+ARXIV_SEARCH_GUIDE = """
+ArXiv uses a query in the form: all:<terms>.
+We can incorporate synonyms, boolean operators, etc.
+Focus on purely natural language or minimal formatting.
+ArXiv does not have a deeply complex advanced syntax like Scopus.
+We simply want multiple variations or angles on the user’s query
+to capture different aspects of the topic.
+Use "all:some keywords" style.
+"""
+
+CORE_SEARCH_GUIDE = """
+CORE allows a query param like 'title:(...) AND abstract:(...)' etc.
+Similar to advanced boolean expressions.
+We want multiple angles to discover relevant papers.
+Use synonyms, phrases, parentheses, and boolean operators
+to generate diverse queries for CORE.
+"""
+
 GENERATE_QUERIES = """
-You are tasked with generating optimized search queries to find relevant research articles addressing a specific point. Follow these instructions carefully:
+You are an expert in academic literature search query formulation. Your task is to generate optimized search queries for academic databases to find research articles relevant to a user's research query.
 
-1. Review the following claim that needs to be addressed by the literature search:
-<claim>
-{CLAIM}
-</claim>
+User Research Query:
+{QUERY}
 
-2. Consider the following search guidance:
-<search_guidance>
+Search Platform Guidance:
 {SEARCH_GUIDANCE}
-</search_guidance>
 
-3. Generate {NUM_QUERIES} highly optimized search queries that would surface the most relevant, insightful, and comprehensive set of research articles to shed light on various aspects of the given point. Your queries should:
+Number of Queries to Generate: {NUM_QUERIES}
 
-- Directly address the key issues and nuances of the point content
-- Demonstrate creativity and variety to capture different dimensions of the topic
-- Use precise terminology and logical operators for high-quality results
-- Cover a broad range of potential subtopics, perspectives, and article types related to the point
-- Strictly adhere to any specific requirements provided in the search guidance
+Instructions:
+1. Understand the User Research Query. Identify the core concepts, keywords, and nuances of the research topic.
+2. Review the Search Platform Guidance. This guidance provides specific syntax, operators, and best practices for formulating effective queries on the target database platform (e.g., Scopus, OpenAlex, ArXiv, CORE).
+3. Generate {NUM_QUERIES} distinct search queries. Each query should represent a unique approach to searching for relevant articles. Consider variations in:
+    - Keywords: Use synonyms, related terms, and broader or narrower concepts.
+    - Phrase variations: Explore different phrasing and combinations of keywords.
+    - Boolean operators: Strategically use AND, OR, NOT to refine search focus.
+    - Field codes (if applicable): Utilize field codes (e.g., TITLE, ABS, KEY) as per the platform guidance to target specific document sections.
+4. Ensure each generated query is syntactically correct and optimized for the specified Search Platform, adhering to the Search Platform Guidance.
+5. Aim for diversity in the generated queries to comprehensively cover the research topic from multiple angles.
+6. Output the queries as a JSON list of strings. If any query string contains double quotes, escape them with backslashes (\\").
 
-4. Provide your response as a list of strings in the following format:
+Example JSON Output:
+{{
+  "queries": [
+    "query variation 1",
+    "query variation 2",
+    "query variation 3",
+    ...
+  ]
+}}
 
-[
-  "query_1",
-  "query_2",
-  "query_3",
-  ...
-]
-
-Replace query_1, query_2, etc. with your actual search queries. The number of queries should match {NUM_QUERIES}.
-
-5. If the search guidance specifies a particular platform (e.g., Scopus, Web of Science), ensure your queries are formatted appropriately for that platform.
-
-6. Important: If your queries contain quotation marks, ensure they are properly escaped with a backslash (\\") to maintain valid list formatting.
-
-Generate the list of search queries now, following the instructions above.
+Generate {NUM_QUERIES} high-quality, diverse search queries that are optimized for academic literature databases and tailored to the Search Platform Guidance provided. Focus on creating queries that are precise, comprehensive, and effective in retrieving relevant research articles for the User Research Query.
 """
 
 class QueryResponse(BaseModel):
     queries: List[str] = Field(..., description="List of generated search queries")
 
-async def formulate_queries(claim: str, num_queries: int, query_type: str) -> List[str]:
+async def formulate_queries(user_query: str, num_queries: int, query_type: str) -> List[str]:
     """
-    Generate advanced search queries for the given claim and platform.
+    Generate search queries for a specific platform (scopus, openalex, arxiv, core).
     """
     if query_type.lower() == 'scopus':
         search_guidance = SCOPUS_SEARCH_GUIDE
     elif query_type.lower() == 'openalex':
         search_guidance = OPENALEX_SEARCH_GUIDE
+    elif query_type.lower() == 'arxiv':
+        search_guidance = ARXIV_SEARCH_GUIDE
+    elif query_type.lower() == 'core':
+        search_guidance = CORE_SEARCH_GUIDE
     else:
         raise ValueError(f"Unsupported query type: {query_type}")
 
-    prompt = GENERATE_QUERIES.replace("<CLAIM>", "").replace("</claim>", "").replace("<search_guidance>", "").replace("</search_guidance>", "")
-    prompt = prompt.format(CLAIM=claim, SEARCH_GUIDANCE=search_guidance, NUM_QUERIES=num_queries)
+    prompt = GENERATE_QUERIES.format(
+        QUERY=user_query,
+        SEARCH_GUIDANCE=search_guidance,
+        NUM_QUERIES=num_queries
+    )
 
     result = await llm_handler.process(
         prompts=prompt,
         model=get_model_or_default(None),
         response_type=QueryResponse
     )
-    
+
     if not result.success:
         logger.error(f"Failed to formulate queries: {result.error}")
         return []

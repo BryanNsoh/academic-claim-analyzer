@@ -86,10 +86,38 @@ def load_requests_from_yaml(yaml_file: str) -> List[Dict[str, Any]]:
         logger.error(f"Error loading requests from YAML: {str(e)}")
         raise
 
+def merge_configs(global_config: dict, request_config: dict) -> dict:
+    """
+    Deep merge two configuration dictionaries.
+    In case of conflict, the request_config values take precedence.
+    """
+    merged = global_config.copy()
+    for key, value in request_config.items():
+        if key in merged and isinstance(merged[key], dict) and isinstance(value, dict):
+            merged[key] = merge_configs(merged[key], value)
+        else:
+            merged[key] = value
+    return merged
+
 async def process_requests(requests_data: List[Dict[str, Any]], config: BatchProcessorConfig) -> Dict[str, Any]:
     """Process a list of requests using the provided configuration."""
     results = {}
     logger.info(f"Full requests data object: {requests_data}")
+
+    # Build a global configuration dictionary from BatchProcessorConfig
+    global_config = {
+        "processing": {
+            "num_queries": config.num_queries,
+            "papers_per_query": config.papers_per_query,
+            "num_papers_to_return": config.num_papers_to_return
+        },
+        "logging": {"level": config.log_level},
+        "search": {
+            "platforms": config.search_platforms,
+            "min_year": config.min_year,
+            "max_year": config.max_year,
+        }
+    }
 
     for req_data in requests_data:
         query_text = req_data.get('query', '').strip()
@@ -104,16 +132,21 @@ async def process_requests(requests_data: List[Dict[str, Any]], config: BatchPro
             # fallback to first few words of query
             request_id = "_".join(query_text.split()[:5]) or "unnamed_request"
 
+        # Merge global config with request-specific config
+        req_config = req_data.get('config', {})
+        merged_config = merge_configs(global_config, req_config)
+
         try:
-            # Analyze this request
+            # Analyze this request with the merged configuration
             analysis = await analyze_request(
                 query=query_text,
                 ranking_guidance=ranking_text,
                 exclusion_criteria=req_data.get('exclusion_criteria', {}),
                 data_extraction_schema=req_data.get('information_extraction', {}),
-                num_queries=req_data.get('config', {}).get('num_queries', config.num_queries),
-                papers_per_query=req_data.get('config', {}).get('papers_per_query', config.papers_per_query),
-                num_papers_to_return=req_data.get('config', {}).get('num_papers_to_return', config.num_papers_to_return)
+                num_queries=merged_config["processing"]["num_queries"],
+                papers_per_query=merged_config["processing"]["papers_per_query"],
+                num_papers_to_return=merged_config["processing"]["num_papers_to_return"],
+                config=merged_config  # Pass the complete merged config
             )
 
             if isinstance(analysis, RequestAnalysis):

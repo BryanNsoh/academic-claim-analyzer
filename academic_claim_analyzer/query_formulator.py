@@ -96,13 +96,11 @@ Example Searches
 """
 
 ARXIV_SEARCH_GUIDE = """
-ArXiv uses a query in the form: all:<terms>.
-We can incorporate synonyms, boolean operators, etc.
+ArXiv uses natural language queries in the form of plain strings
 Focus on purely natural language or minimal formatting.
 ArXiv does not have a deeply complex advanced syntax like Scopus.
 We simply want multiple variations or angles on the user’s query
 to capture different aspects of the topic.
-Use "all:some keywords" style.
 """
 
 CORE_SEARCH_GUIDE = """

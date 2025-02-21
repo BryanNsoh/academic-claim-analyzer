@@ -5,6 +5,7 @@ import random
 import math
 import json
 import logging
+import asyncio
 from typing import List, Dict, Any, Optional, Type
 from pydantic import BaseModel, Field, create_model
 
@@ -64,7 +65,7 @@ async def rank_papers(
         p.id = f"paper_{i+1}"
         paper_scores[p.id] = []
 
-    # Conduct multiple ranking rounds
+    # Conduct multiple ranking rounds concurrently
     average_scores = await _conduct_ranking_rounds(valid_papers, query, ranking_guidance, num_rounds, paper_scores)
 
     # Sort & pick top_n
@@ -104,7 +105,6 @@ async def rank_papers(
 def calculate_ranking_rounds(num_papers: int) -> int:
     if num_papers <= 8:
         return 3
-    import math
     return min(8, math.floor(math.log(num_papers, 1.4)) + 2)
 
 async def _conduct_ranking_rounds(
@@ -114,7 +114,8 @@ async def _conduct_ranking_rounds(
     num_rounds: int,
     paper_scores: Dict[str, List[float]]
 ) -> Dict[str, float]:
-    for round_idx in range(num_rounds):
+    async def run_round(round_idx: int) -> Dict[str, List[float]]:
+        round_scores = {}
         logger.info(f"Ranking round {round_idx+1}/{num_rounds}")
         shuffled = random.sample(valid_papers, len(valid_papers))
         groups = create_balanced_groups(shuffled, 2, 5)
@@ -126,29 +127,31 @@ async def _conduct_ranking_rounds(
             response_type=RankingResponse
         )
         if not call_result.success or not isinstance(call_result.data, list):
-            logger.error(f"Round failed: {call_result.error}")
-            continue
+            logger.error(f"Round {round_idx+1} failed: {call_result.error}")
+            return round_scores
 
         for idx, item in enumerate(call_result.data):
             if item.error:
-                logger.error(f"Group {idx} error: {item.error}")
+                logger.error(f"Round {round_idx+1} Group {idx} error: {item.error}")
                 continue
             ranking_resp = item.data
             if not ranking_resp or not ranking_resp.rankings:
-                logger.error("Empty or invalid ranking response")
+                logger.error(f"Round {round_idx+1} empty or invalid ranking response for group {idx}")
                 continue
 
             group_size = len(ranking_resp.rankings)
             for rank_obj in ranking_resp.rankings:
                 pid = rank_obj.paper_id
-                if pid in paper_scores:
-                    score = (group_size - rank_obj.rank + 1) / group_size
-                    paper_scores[pid].append(score)
+                score = (group_size - rank_obj.rank + 1) / group_size
+                round_scores.setdefault(pid, []).append(score)
+        return round_scores
 
-    # compute averages
-    avg_scores = {}
-    for pid, scores in paper_scores.items():
-        avg_scores[pid] = sum(scores)/len(scores) if scores else 0.0
+    tasks = [run_round(i) for i in range(num_rounds)]
+    rounds_scores = await asyncio.gather(*tasks)
+    for round_dict in rounds_scores:
+        for pid, scores in round_dict.items():
+            paper_scores.setdefault(pid, []).extend(scores)
+    avg_scores = {pid: (sum(scores) / len(scores)) if scores else 0.0 for pid, scores in paper_scores.items()}
     return avg_scores
 
 def create_balanced_groups(papers: List[Paper], min_size: int, max_size: int) -> List[List[Paper]]:
@@ -201,23 +204,6 @@ Instructions:
 Output Format:
 Return a valid JSON object of type RankingResponse. Ensure that the JSON contains a list of rankings, with each ranking including the paper_id, rank, and explanation.
 
-Example JSON Output:
-{{
-  "rankings": [
-    {{
-      "paper_id": "paper_1",
-      "rank": 1,
-      "explanation": "Most relevant due to direct focus on query and strong empirical evidence, as per ranking guidance."
-    }},
-    {{
-      "paper_id": "paper_2",
-      "rank": 2,
-      "explanation": "Relevant but less direct evidence compared to paper_1. Aligns with ranking guidance on methodology."
-    }},
-    ...
-  ]
-}}
-
 Ensure unique ranks from 1 to {len(group)} are used. Focus on clear, concise explanations that justify each paper's rank in relation to the query and ranking guidance.
 """
     return prompt.strip()
@@ -247,18 +233,6 @@ Output Format:
 Return a valid JSON object of type AnalysisResponse. Ensure that the JSON contains:
 - A detailed "analysis" string summarizing your evaluation of the paper's methodology, evidence, limitations, and direct relevance to the query, considering the Ranking Guidance.
 - A list of "relevant_quotes" containing 3-5 key excerpts from the paper that best demonstrate its relevance.
-
-Example JSON Output:
-{{
-  "analysis": "This paper provides strong empirical evidence using a robust methodology... However, it has limitations in...",
-  "relevant_quotes": [
-    "Quote 1 directly supporting the query...",
-    "Quote 2 explaining the methodology...",
-    "Quote 3 highlighting a key finding..."
-  ]
-}}
-
-Provide a comprehensive analysis and select quotes that best represent the paper's contribution and relevance to the research query, as guided by the user's preferences.
 """
     single_result = await llm_handler.process(
         prompts=prompt,
@@ -275,11 +249,9 @@ async def _evaluate_paper(
     exclusion_schema: Optional[Type[BaseModel]],
     extraction_schema: Optional[Type[BaseModel]]
 ) -> Dict[str, Dict[str, Any]]:
-    """Evaluate paper with combined schema, if needed."""
     if not (exclusion_schema or extraction_schema):
         return {}
 
-    # We'll create a combined schema on the fly
     CombinedModel = _create_combined_model(exclusion_schema, extraction_schema)
 
     prompt = f"""
@@ -298,21 +270,7 @@ Instructions:
     - If it is an exclusion criterion, determine if the paper meets the criterion (True/False).
     - If it is a data extraction field, extract the requested information from the paper content. If the information is not available, use default values as defined in schema description.
 4. Ensure your output is a valid JSON object that strictly adheres to the schema. Do not include any extraneous fields or text outside the JSON.
-
-Output Format:
-Return valid JSON object that conforms to the combined schema provided. For exclusion criteria, use boolean values. For extraction fields, provide the extracted data, using default values if necessary as described in schema.
-
-Example JSON Output (based on schema):
-{{
-  "exclusion_criterion_1": false,
-  "exclusion_criterion_2": true,
-  "data_field_1": "Extracted value or default",
-  "data_field_2": 123 or -1
-  ...
-}}
-Ensure the JSON output strictly matches the schema with no additional fields or descriptive text. Focus on accuracy and adherence to the schema.
 """
-
     result = await llm_handler.process(
         prompts=prompt,
         model=get_model_or_default(None),
@@ -325,7 +283,6 @@ Ensure the JSON output strictly matches the schema with no additional fields or 
             'extracted_data': {}
         }
 
-    # The typed object
     obj = result.data
     exclusion_part = {}
     extraction_part = {}
@@ -349,7 +306,6 @@ def _create_combined_model(
     exclusion_schema: Optional[Type[BaseModel]],
     extraction_schema: Optional[Type[BaseModel]]
 ) -> Type[BaseModel]:
-    """Combine two pydantic models into a single ephemeral model."""
     if not exclusion_schema and not extraction_schema:
         return create_model("EmptyModel")
 
@@ -374,9 +330,7 @@ def _create_combined_model(
     )
     return new_model
 
-
 async def _get_bibtex(paper: Paper) -> str:
-    """Get or generate BibTeX info."""
     from .search.bibtex import get_bibtex_from_doi, get_bibtex_from_title
     if paper.doi:
         bib = get_bibtex_from_doi(paper.doi)

@@ -2,9 +2,11 @@ config:
   processing:
     num_queries: 2          # Reduced for testing speed
     papers_per_query: 3     # Reduced for testing speed
-    num_papers_to_return: 2 # Reduced for testing speed
+    num_papers_to_return: 2  # Reduced for testing speed
+  
   logging:
-    level: DEBUG           # Set to DEBUG for detailed logs during testing
+    level: INFO           # Set to INFO for less verbose logs, or DEBUG for detailed logs during testing
+  
   search:
     platforms:              # Start with a limited set for faster testing, can expand later
       - openalex
@@ -57,7 +59,7 @@ requests:
     query: "Sustainable irrigation techniques for rice cultivation"
     ranking_guidance: "Emphasize papers that discuss water-saving technologies in rice farming."
     config:
-      num_papers_to_return: 4  # Override global setting for this request
+      num_papers_to_return: 2  # Override global setting for this request, reduced to 2 for testing
     exclusion_criteria:
       no_rice_focus:
         type: boolean

@@ -19,15 +19,19 @@ async def analyze_request(
     data_extraction_schema: Optional[Dict[str, Any]] = None,
     num_queries: int = 2,
     papers_per_query: int = 2,
-    num_papers_to_return: int = 2
+    num_papers_to_return: int = 2,
+    config: Optional[Dict[str, Any]] = None
 ) -> RequestAnalysis:
     """
     Analyze a user's research request. This includes:
-      1) Formulating queries for multiple platforms (Scopus, OpenAlex, arXiv, etc.)
+      1) Formulating queries for selected platforms
       2) Searching and fetching papers
       3) Applying exclusion criteria
       4) Ranking papers using the provided ranking guidance
       5) Extracting requested information
+
+    If a config is provided and includes a "search.platforms" list, only those platforms are used.
+    Otherwise, the default is to use all four platforms: openalex, scopus, core, and arxiv.
     """
     logger.info(f"Analyzing request with exclusion criteria: {exclusion_criteria}")
     logger.info(f"Data extraction schema: {data_extraction_schema}")
@@ -43,8 +47,13 @@ async def analyze_request(
         }
     )
 
+    # Determine which platforms to use.
+    default_platforms = ["openalex", "scopus", "core", "arxiv"]
+    if config and "search" in config and "platforms" in config["search"]:
+        default_platforms = config["search"]["platforms"]
+    analysis.parameters["platforms"] = default_platforms
+
     try:
-        # Create Pydantic models from schemas if provided
         if exclusion_criteria:
             ExclusionCriteriaModel = create_model_from_schema('ExclusionCriteria', exclusion_criteria)
             analysis.exclusion_schema = ExclusionCriteriaModel
@@ -61,10 +70,6 @@ async def analyze_request(
     return analysis
 
 def create_model_from_schema(model_name: str, schema: Dict[str, Any]) -> Type[BaseModel]:
-    """
-    Dynamically create a Pydantic model from a dictionary schema describing fields
-    and their types.
-    """
     annotations = {}
     fields = {}
     properties = {}
@@ -88,7 +93,7 @@ def create_model_from_schema(model_name: str, schema: Dict[str, Any]) -> Type[Ba
             description += " (Must be true/false)"
             default_value = False
             json_type = 'boolean'
-        elif field_type == 'array' or field_type == 'list':
+        elif field_type in ['array', 'list']:
             from typing import List as PyList
             python_type = PyList[str]
             description += " (List of strings, empty if none)"
@@ -132,7 +137,6 @@ def create_model_from_schema(model_name: str, schema: Dict[str, Any]) -> Type[Ba
     return type(model_name, (BaseModel,), namespace)
 
 async def _perform_analysis(analysis: RequestAnalysis) -> None:
-    """Execute the full analysis pipeline: queries -> search -> exclusion -> rank."""
     await _formulate_queries(analysis)
     await _perform_searches(analysis)
     if analysis.search_results:
@@ -140,56 +144,44 @@ async def _perform_analysis(analysis: RequestAnalysis) -> None:
         await _rank_papers(analysis)
 
 async def _formulate_queries(analysis: RequestAnalysis) -> None:
-    """Generate search queries for different platforms (OpenAlex, Scopus, Arxiv)."""
-    try:
-        # OpenAlex
-        openalex_queries = await formulate_queries(
-            analysis.query,
-            analysis.parameters["num_queries"],
-            "openalex"
-        )
-        for q in openalex_queries:
-            analysis.add_query(q, "openalex")
+    chosen_platforms = analysis.parameters.get("platforms", ["openalex", "scopus", "core", "arxiv"])
+    tasks = []
+    num_queries = analysis.parameters["num_queries"]
 
-        # Scopus
-        scopus_queries = await formulate_queries(
-            analysis.query,
-            analysis.parameters["num_queries"],
-            "scopus"
-        )
-        for q in scopus_queries:
-            analysis.add_query(q, "scopus")
+    if "openalex" in chosen_platforms:
+        tasks.append(formulate_queries(analysis.query, num_queries, "openalex"))
+    if "scopus" in chosen_platforms:
+        tasks.append(formulate_queries(analysis.query, num_queries, "scopus"))
+    if "core" in chosen_platforms:
+        tasks.append(formulate_queries(analysis.query, num_queries, "core"))
+    if "arxiv" in chosen_platforms:
+        tasks.append(formulate_queries(analysis.query, num_queries, "arxiv"))
 
-        # arXiv
-        arxiv_queries = await formulate_queries(
-            analysis.query,
-            analysis.parameters["num_queries"],
-            "arxiv"
-        )
-        for q in arxiv_queries:
-            analysis.add_query(q, "arxiv")
+    results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        # CORE (optionally, some want to pass raw or do the same approach)
-        # For consistency, let's also do re-formulation for CORE:
-        core_queries = await formulate_queries(
-            analysis.query,
-            analysis.parameters["num_queries"],
-            "core"
-        )
-        for q in core_queries:
-            analysis.add_query(q, "core")
+    appended_platforms = []
+    if "openalex" in chosen_platforms:
+        appended_platforms.append("openalex")
+    if "scopus" in chosen_platforms:
+        appended_platforms.append("scopus")
+    if "core" in chosen_platforms:
+        appended_platforms.append("core")
+    if "arxiv" in chosen_platforms:
+        appended_platforms.append("arxiv")
 
-    except Exception as e:
-        logger.error(f"Error formulating queries: {str(e)}", exc_info=True)
-        raise
+    for platform, result in zip(appended_platforms, results):
+        if isinstance(result, Exception):
+            logger.error(f"Error formulating queries for {platform}: {str(result)}")
+        else:
+            for q in result:
+                analysis.add_query(q, platform)
 
 async def _perform_searches(analysis: RequestAnalysis) -> None:
-    """Execute searches across different platforms: openalex, scopus, core, arxiv."""
+    chosen_platforms = analysis.parameters.get("platforms", ["openalex", "scopus", "core", "arxiv"])
     search_tasks = []
     papers_per_query = analysis.parameters["papers_per_query"]
 
-    try:
-        # OpenAlex
+    if "openalex" in chosen_platforms:
         openalex_search = OpenAlexSearch("youremail@example.com")
         openalex_queries = [q for q in analysis.queries if q.source == "openalex"]
         for query in openalex_queries:
@@ -197,7 +189,7 @@ async def _perform_searches(analysis: RequestAnalysis) -> None:
                 _search_and_add_results(openalex_search, query.query, papers_per_query, analysis)
             )
 
-        # Scopus
+    if "scopus" in chosen_platforms:
         scopus_search = ScopusSearch()
         scopus_queries = [q for q in analysis.queries if q.source == "scopus"]
         for query in scopus_queries:
@@ -205,7 +197,7 @@ async def _perform_searches(analysis: RequestAnalysis) -> None:
                 _search_and_add_results(scopus_search, query.query, papers_per_query, analysis)
             )
 
-        # CORE
+    if "core" in chosen_platforms:
         core_search = CORESearch()
         core_queries = [q for q in analysis.queries if q.source == "core"]
         for query in core_queries:
@@ -213,7 +205,7 @@ async def _perform_searches(analysis: RequestAnalysis) -> None:
                 _search_and_add_results(core_search, query.query, papers_per_query, analysis)
             )
 
-        # arXiv
+    if "arxiv" in chosen_platforms:
         arxiv_search = ArxivSearch()
         arxiv_queries = [q for q in analysis.queries if q.source == "arxiv"]
         for query in arxiv_queries:
@@ -221,11 +213,7 @@ async def _perform_searches(analysis: RequestAnalysis) -> None:
                 _search_and_add_results(arxiv_search, query.query, papers_per_query, analysis)
             )
 
-        await asyncio.gather(*search_tasks)
-
-    except Exception as e:
-        logger.error(f"Error performing searches: {str(e)}", exc_info=True)
-        raise
+    await asyncio.gather(*search_tasks)
 
 async def _search_and_add_results(
     search_module: BaseSearch,
@@ -233,7 +221,6 @@ async def _search_and_add_results(
     limit: int,
     analysis: RequestAnalysis
 ) -> None:
-    """Run a single search and add results to the analysis."""
     try:
         results = await search_module.search(query, limit)
         if results and isinstance(results, list):
@@ -244,7 +231,6 @@ async def _search_and_add_results(
         logger.error(f"Error during search with {search_module.__class__.__name__}: {str(e)}")
 
 async def _apply_exclusion_criteria(analysis: RequestAnalysis) -> None:
-    """Apply LLM-based exclusion criteria and data extraction to search results."""
     if not analysis.exclusion_schema and not analysis.data_extraction_schema:
         logger.info("No exclusion or extraction schema provided. Skipping.")
         return
@@ -331,7 +317,6 @@ def create_combined_schema(
     exclusion_schema: Optional[Type[BaseModel]],
     extraction_schema: Optional[Type[BaseModel]]
 ) -> Type[BaseModel]:
-    """Combine two Pydantic models (exclusion, extraction) into one for LLM parsing."""
     from pydantic import Field
 
     fields = {}
@@ -351,7 +336,6 @@ def create_combined_schema(
         for name, field in extraction_schema.model_fields.items():
             annotations[name] = field.annotation
             fields[name] = Field(description=field.description or f"Extraction: {name}")
-            # map to JSON types
             if field.annotation == int:
                 json_type = 'integer'
             elif field.annotation == float:
@@ -381,7 +365,6 @@ def create_combined_schema(
     return type("CombinedSchema", (BaseModel,), namespace)
 
 async def _rank_papers(analysis: RequestAnalysis) -> None:
-    """Rank the papers using the paper_ranker module."""
     if not analysis.search_results:
         logger.warning("No papers to rank.")
         return
@@ -398,3 +381,14 @@ async def _rank_papers(analysis: RequestAnalysis) -> None:
             analysis.add_ranked_paper(rp)
     except Exception as e:
         logger.error(f"Error ranking papers: {str(e)}", exc_info=True)
+
+if __name__ == "__main__":
+    import asyncio
+    analysis = asyncio.run(analyze_request(
+        query="Urban green spaces enhance community well-being and mental health in cities.",
+        ranking_guidance="Prioritize empirical studies with robust methodologies.",
+        num_queries=3,
+        papers_per_query=5,
+        num_papers_to_return=3
+    ))
+    print(analysis.to_dict())

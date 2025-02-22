@@ -47,9 +47,9 @@ async def rank_papers(
     Rank the given papers based on:
     - Relevance to 'query'
     - User-supplied 'ranking_guidance'
-    1) Do multi-round partial ranking
+    1) Do multi-round partial ranking (all rounds are run concurrently)
     2) Sort by aggregated score
-    3) Do a deeper analysis pass for the top papers
+    3) Do a deeper analysis pass for the top papers (also executed concurrently)
     """
     logger.info(f"Starting to rank {len(papers)} papers using model {DEFAULT_LLM_MODEL}.")
     logger.info(f"User ranking guidance: {ranking_guidance!r}")
@@ -65,10 +65,10 @@ async def rank_papers(
         p.id = f"paper_{i+1}"
         paper_scores[p.id] = []
 
-    # Conduct multiple ranking rounds concurrently
+    # Launch all ranking rounds concurrently
     average_scores = await _conduct_ranking_rounds(valid_papers, query, ranking_guidance, num_rounds, paper_scores)
 
-    # Sort & pick top_n
+    # Sort & pick top_n papers
     sorted_by_score = sorted(
         valid_papers,
         key=lambda pp: average_scores.get(pp.id, 0.0),
@@ -76,28 +76,15 @@ async def rank_papers(
     )
     top_papers = sorted_by_score[:top_n]
 
-    # Detailed analysis
+    # Detailed analysis for each top paper executed concurrently
+    analysis_tasks = [ _process_top_paper(paper, query, ranking_guidance, average_scores) for paper in top_papers ]
+    analysis_results = await asyncio.gather(*analysis_tasks, return_exceptions=True)
     ranked_results = []
-    for paper in top_papers:
-        try:
-            analysis_obj = await _get_paper_analysis(paper, query, ranking_guidance)
-            if not analysis_obj:
-                continue
-
-            final_bibtex = await _get_bibtex(paper)
-            rp_dict = paper.model_dump()
-            rp_dict.update({
-                'relevance_score': average_scores.get(paper.id, 0.0),
-                'analysis': analysis_obj.analysis,
-                'relevant_quotes': analysis_obj.relevant_quotes,
-                'bibtex': final_bibtex or rp_dict.get('bibtex', ''),
-                'exclusion_criteria_result': {},
-                'extraction_result': {}
-            })
-
-            ranked_results.append(RankedPaper(**rp_dict))
-        except Exception as e:
-            logger.error(f"Error processing top paper {paper.title[:100]}: {str(e)}")
+    for result in analysis_results:
+        if isinstance(result, Exception):
+            logger.error(f"Error in processing a top paper: {result}")
+        elif result is not None:
+            ranked_results.append(result)
 
     logger.info(f"Returning {len(ranked_results)} ranked papers")
     return ranked_results
@@ -243,6 +230,26 @@ Return a valid JSON object of type AnalysisResponse. Ensure that the JSON contai
         logger.error(f"Analysis error for {paper.title[:50]}: {single_result.error}")
         return None
     return single_result.data
+
+async def _process_top_paper(paper: Paper, query: str, ranking_guidance: str, average_scores: Dict[str, List[float]]) -> Optional[RankedPaper]:
+    try:
+        analysis_obj = await _get_paper_analysis(paper, query, ranking_guidance)
+        if not analysis_obj:
+            return None
+        final_bibtex = await _get_bibtex(paper)
+        rp_dict = paper.model_dump()
+        rp_dict.update({
+            'relevance_score': average_scores.get(paper.id, 0.0),
+            'analysis': analysis_obj.analysis,
+            'relevant_quotes': analysis_obj.relevant_quotes,
+            'bibtex': final_bibtex or rp_dict.get('bibtex', ''),
+            'exclusion_criteria_result': {},
+            'extraction_result': {}
+        })
+        return RankedPaper(**rp_dict)
+    except Exception as e:
+        logger.error(f"Error processing top paper {paper.title[:100]}: {str(e)}")
+        return None
 
 async def _evaluate_paper(
     paper: Paper,

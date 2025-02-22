@@ -9,10 +9,9 @@ config:
   
   search:
     platforms:              # Start with a limited set for faster testing, can expand later
-      - openalex
-      - scopus
       - core
       - arxiv
+
     min_year: 2020         # Focus on recent papers for tests
     max_year: 2024
 

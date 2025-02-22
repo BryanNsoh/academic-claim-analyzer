@@ -3,19 +3,21 @@
 ## Overview
 
 The batch processor allows you to analyze multiple research requests simultaneously, providing comprehensive evidence gathering and analysis. For each request, you can specify:
-- **`query`**: The natural-language research question or topic you’re investigating.
-- **`ranking_guidance`**: A string (short or long) telling the ranker how to prioritize papers (e.g., “focus on recent empirical studies,” or “prioritize theoretical frameworks”).
-- Exclusion criteria to systematically filter out irrelevant papers
-- Information extraction schemas to pull structured data from relevant papers
-- Request-specific processing parameters
+- **`query`** (or alternatively **`queries`**):  
+  - **`query`**: The natural-language research question or topic you’re investigating (single string).  
+  - **`queries`**: An array of multiple queries for the same request. Each query is processed separately, and the results are merged before ranking.
+- **`ranking_guidance`**: A string (short or long) telling the ranker how to prioritize papers (e.g., “focus on recent empirical studies” or “prioritize theoretical frameworks”).
+- Exclusion criteria to systematically filter out irrelevant papers.
+- Information extraction schemas to pull structured data from relevant papers.
+- Request-specific processing parameters.
 
 The system will:
-1. Generate optimized search queries across academic databases
-2. Retrieve and analyze relevant papers
-3. Apply your exclusion criteria if specified
-4. Extract structured information if requested
-5. Rank papers by relevance to the request, guided by your ranking instructions
-6. Provide both detailed and concise analysis outputs
+1. Generate optimized search queries across academic databases.
+2. Retrieve and analyze relevant papers.
+3. Apply your exclusion criteria (if specified).
+4. Extract structured information (if requested).
+5. Rank papers by relevance to the request, guided by your ranking instructions.
+6. Provide both detailed and concise analysis outputs.
 
 ## Basic Usage
 
@@ -31,10 +33,11 @@ Results will be automatically organized in a folder named after your YAML file (
 ## YAML Structure
 
 Your YAML file should contain:
-1. Global configuration for processing parameters
-2. One or more requests with their associated criteria and schemas
+1. Global configuration for processing parameters.
+2. One or more requests with their associated criteria and schemas.
 
 ### 1. Global Configuration
+
 ```yaml
 config:
   processing:
@@ -55,7 +58,10 @@ config:
     max_year: 2024
 ```
 
-### 2. Simple Request
+### 2. Simple Request (Single Query)
+
+You can use the single-string **`query`** field if you only need one query per request:
+
 ```yaml
 requests:
   - id: basic_request      # Optional identifier for result files
@@ -63,59 +69,81 @@ requests:
     ranking_guidance: "Rank papers primarily by relevance to the query."
 ```
 
-### 3. Request with Exclusion Criteria
+### 3. Multi‑Query Request
+
+Alternatively, use the **`queries`** array to supply multiple top‑level queries. The processor will run the search pipeline for each query, merge the results, and then perform a single ranking pass.
+
 ```yaml
 requests:
-  - id: ml_yield
-    query: "Machine learning improves crop yield predictions"
-    ranking_guidance: "Prioritize papers with empirical results."
+  - id: multi_query_request
+    queries:
+      - "Machine learning applications in crop yield prediction"
+      - "Deep learning approaches for predicting crop yields"
+    ranking_guidance: "Prioritize recent studies and empirical evaluations."
+```
+
+### 4. Request with Exclusion Criteria
+
+Exclusion criteria are used to filter out papers that don’t meet your requirements. Each criterion should be:
+- Defined with a descriptive key.
+- Of type boolean.
+- Accompanied by a clear description.
+
+```yaml
+requests:
+  - id: exclusion_criteria_test_request
+    query: "Impact of climate change on coffee production"
+    ranking_guidance: "Focus on studies with quantitative data and specific geographic regions."
     exclusion_criteria:
-      no_empirical:
+      review_paper:
         type: boolean
-        description: "Paper contains no empirical evaluation"
-      insufficient_data:
+        description: "Is the paper a review article (not original research)?"
+      pre_2022_study:
         type: boolean
-        description: "Study uses less than one year of data"
+        description: "Was the main data collection for the study conducted before 2022?"
 ```
 
-The exclusion criteria are used to filter out papers. Any paper matching ANY of the criteria is excluded. Each criterion must:
-- Use a descriptive key (e.g., 'no_empirical')
-- Be of type boolean
-- Include a clear description of what constitutes exclusion
-- Be objectively evaluable from paper content
+*Note: You may also use `queries` instead of `query` for multi‑query processing in this case.*
 
-### 4. Request with Information Extraction
+### 5. Request with Information Extraction
+
+When you need to extract specific structured data from papers, define an extraction schema. Valid field types include:
+- `string`
+- `float`
+- `integer`
+- `boolean`
+- `list`
+
 ```yaml
 requests:
-  - id: ml_yield
-    query: "Machine learning improves crop yield predictions"
-    ranking_guidance: "Focus on papers that quantify prediction accuracy."
+  - id: information_extraction_test_request
+    query: "Effectiveness of vertical farming for urban agriculture"
+    ranking_guidance: "Rank papers based on detailed economic and environmental impact analysis."
     information_extraction:
-      accuracy:
+      land_use_efficiency:
         type: float
-        description: "Model prediction accuracy in percentage"
-      methods_used:
-        type: list
-        description: "List of machine learning methods used"
-      dataset_size:
+        description: "Land use efficiency improvement (%) compared to traditional farming"
+      energy_consumption:
         type: integer
-        description: "Number of samples in dataset"
-      includes_uncertainty:
+        description: "Energy consumption (kWh per kg of produce)"
+      water_usage_reduction:
+        type: float
+        description: "Water usage reduction (%) compared to traditional farming"
+      economic_viability:
         type: boolean
-        description: "Whether uncertainty estimates are provided"
-      limitations:
+        description: "Is the vertical farming system considered economically viable in the study?"
+      crop_types_suitable:
+        type: list
+        description: "List of crop types found to be suitable for vertical farming in the study"
+      system_limitations:
         type: string
-        description: "Key limitations of the study"
+        description: "Key limitations or challenges of vertical farming systems discussed"
 ```
 
-Valid field types for extraction:
-- `string`: Textual content without specific structure
-- `float`: Decimal numbers (e.g., accuracies, measurements)
-- `integer`: Whole numbers (e.g., counts, years)
-- `boolean`: True/false values for binary characteristics
-- `list`: Arrays of values (e.g., methods used, factors considered)
+### 6. Complete Example with All Features
 
-### 5. Complete Example with All Features
+Below is a complete YAML example that includes global configuration, multi‑query support, exclusion criteria, information extraction, and request‑specific overrides.
+
 ```yaml
 config:
   processing:
@@ -137,7 +165,9 @@ config:
 
 requests:
   - id: deep_learning_crops
-    query: "Deep learning outperforms traditional methods in crop disease detection"
+    queries:
+      - "Deep learning outperforms traditional methods in crop disease detection"
+      - "Comparative study of deep neural networks in agricultural disease diagnosis"
     ranking_guidance: "Prioritize papers with comparative studies and performance metrics."
     config:              # Request-specific processing overrides
       num_papers_to_return: 5
@@ -189,7 +219,7 @@ requests:
 The batch processor creates a results folder named after your YAML file and generates two types of JSON files for each request:
 
 ### 1. Concise Results (`{request_id}_{timestamp}.json`)
-Contains only the top N papers (specified by num_papers_to_return) with essential information:
+Contains only the top N papers (specified by `num_papers_to_return`) with essential information:
 ```json
 {
   "request_text": {
@@ -223,21 +253,22 @@ Contains only the top N papers (specified by num_papers_to_return) with essentia
 
 ### 2. Full Results (`{request_id}_{timestamp}_full.json`)
 Contains complete analysis data including:
-- All papers found, not just top N
-- Search queries used
-- Complete paper metadata
-- Full text extracts
-- Processing timestamps
-- All analysis details
+- All papers found, not just the top N.
+- Search queries used.
+- Complete paper metadata.
+- Full text extracts.
+- Processing timestamps.
+- All analysis details.
 
 ### Example Directory Structure
+
 For a YAML file named `agriculture_requests.yaml`:
 ```
 agriculture_requests.yaml
 agriculture_requests_results/
   ├── batch_process.log
   ├── deep_learning_crops_20241027_123456.json      # Concise results
-  ├── deep_learning_crops_20241027_123456_full.json # Full results
+  ├── deep_learning_crops_20241027_123456_full.json   # Full results
   ├── iot_irrigation_20241027_123456.json
   └── iot_irrigation_20241027_123456_full.json
 ```
@@ -246,13 +277,13 @@ agriculture_requests_results/
 
 ### How Exclusion Works
 When you specify exclusion criteria:
-1. Each paper is evaluated against all criteria
-2. Criteria are evaluated based on paper's full text and metadata
-3. Any paper matching ANY criterion is excluded
-4. Results include the evaluation outcome for each criterion
-5. Use this to systematically filter irrelevant papers
+1. Each paper is evaluated against all criteria.
+2. Criteria are evaluated based on the paper’s full text and metadata.
+3. Any paper matching **any** criterion is excluded.
+4. Results include the evaluation outcome for each criterion.
+5. Use this to systematically filter out irrelevant papers.
 
-Example thought process for criteria:
+Example:
 ```yaml
 exclusion_criteria:
   no_empirical:
@@ -268,13 +299,12 @@ exclusion_criteria:
 
 ### How Extraction Works
 When you specify an extraction schema:
-1. System analyzes full paper text to find requested information
-2. Data is extracted and validated against specified types
-3. All extracted values are included in results
-4. Use this to gather specific evidence for your request
-5. Schema should target key information needed for request validation
+1. The system analyzes the full text of each paper to find the requested information.
+2. Extracted data is validated against the defined types.
+3. All extracted values are included in the results.
+4. Use this to gather specific evidence for your request.
 
-Example thought process for extraction:
+Example:
 ```yaml
 information_extraction:
   accuracy:
@@ -292,8 +322,14 @@ information_extraction:
 ```
 
 This structured approach ensures:
-- Systematic evaluation of papers
-- Consistent criteria application
-- Structured evidence gathering
-- Reproducible analysis results
-- Clear documentation of findings
+- Systematic evaluation of papers.
+- Consistent criteria application.
+- Structured evidence gathering.
+- Reproducible analysis results.
+- Clear documentation of findings.
+
+---
+
+By using either the `query` or `queries` field in your YAML, you can now tailor each research request to include one or multiple top‑level queries, giving you greater flexibility and control over the analysis process.
+
+Happy researching!

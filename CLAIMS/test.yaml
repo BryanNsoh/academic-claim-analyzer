@@ -17,11 +17,15 @@ config:
 
 requests:
   - id: basic_ml_yield_request
-    query: "Machine learning applications in crop yield prediction"
+    queries:
+      - "Machine learning applications in crop yield prediction"
+      - "Deep learning approaches for predicting crop yields"
     ranking_guidance: "Prioritize recent studies and empirical evaluations."
 
   - id: exclusion_criteria_test_request
-    query: "Impact of climate change on coffee production"
+    queries:
+      - "Impact of climate change on coffee production"
+      - "Effects of global warming on coffee yields"
     ranking_guidance: "Focus on studies with quantitative data and specific geographic regions."
     exclusion_criteria:
       review_paper:

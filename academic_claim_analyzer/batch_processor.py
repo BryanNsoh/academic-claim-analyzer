@@ -1,6 +1,3 @@
-# academic_claim_analyzer/batch_processor.py
-# To run: python -m academic_claim_analyzer.batch_processor
-
 import asyncio
 import json
 import os
@@ -120,33 +117,43 @@ async def process_requests(requests_data: List[Dict[str, Any]], config: BatchPro
     }
 
     for req_data in requests_data:
-        query_text = req_data.get('query', '').strip()
         ranking_text = req_data.get('ranking_guidance', '').strip()
-        if not query_text:
-            logger.warning("Skipping request with empty query.")
-            continue
+        
+        # Check for multi-query: if 'queries' key is provided and is a list, use it; else fallback to single 'query'
+        if 'queries' in req_data and isinstance(req_data['queries'], list):
+            user_query = req_data['queries']
+        else:
+            query_text = req_data.get('query', '').strip()
+            if not query_text:
+                logger.warning("Skipping request with empty query.")
+                continue
+            user_query = query_text
 
         # ID fallback
         request_id = req_data.get('id', '')
         if not request_id:
-            # fallback to first few words of query
-            request_id = "_".join(query_text.split()[:5]) or "unnamed_request"
+            if isinstance(user_query, list):
+                # Fallback to first few words of first query
+                request_id = "_".join(user_query[0].split()[:5]) or "unnamed_request"
+            else:
+                request_id = "_".join(user_query.split()[:5]) or "unnamed_request"
 
         # Merge global config with request-specific config
         req_config = req_data.get('config', {})
         merged_config = merge_configs(global_config, req_config)
 
         try:
-            # Analyze this request with the merged configuration
+            # Analyze this request with the merged configuration.
+            # Note that 'query' may be a list or a string.
             analysis = await analyze_request(
-                query=query_text,
+                query=user_query,
                 ranking_guidance=ranking_text,
                 exclusion_criteria=req_data.get('exclusion_criteria', {}),
                 data_extraction_schema=req_data.get('information_extraction', {}),
                 num_queries=merged_config["processing"]["num_queries"],
                 papers_per_query=merged_config["processing"]["papers_per_query"],
                 num_papers_to_return=merged_config["processing"]["num_papers_to_return"],
-                config=merged_config  # Pass the complete merged config
+                config=merged_config
             )
 
             if isinstance(analysis, RequestAnalysis):
@@ -250,7 +257,11 @@ def batch_analyze_requests(yaml_file: str) -> None:
 
         # Save each request's results
         for req_data in requests_data:
-            query_text = req_data.get('query', '').strip()
+            # Determine query for file naming
+            if 'queries' in req_data and isinstance(req_data['queries'], list):
+                query_text = req_data['queries'][0]
+            else:
+                query_text = req_data.get('query', '').strip()
             if not query_text:
                 continue
             request_id = req_data.get('id', '')

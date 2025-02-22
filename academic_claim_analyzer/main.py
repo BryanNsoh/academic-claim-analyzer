@@ -1,8 +1,6 @@
-# academic_claim_analyzer/main.py
-
 import asyncio
 import logging
-from typing import List, Dict, Any, Optional, Type
+from typing import List, Dict, Any, Optional, Type, Union
 from pydantic import BaseModel, Field, create_model
 
 from .query_formulator import formulate_queries
@@ -13,7 +11,7 @@ from .models import RequestAnalysis, Paper, RankedPaper
 logger = logging.getLogger(__name__)
 
 async def analyze_request(
-    query: str,
+    query: Union[str, List[str]],
     ranking_guidance: str = "",
     exclusion_criteria: Optional[Dict[str, Any]] = None,
     data_extraction_schema: Optional[Dict[str, Any]] = None,
@@ -32,42 +30,69 @@ async def analyze_request(
 
     If a config is provided and includes a "search.platforms" list, only those platforms are used.
     Otherwise, the default is to use all four platforms: openalex, scopus, core, and arxiv.
+
+    This function now supports multiple user queries if `query` is provided as a list.
     """
     logger.info(f"Analyzing request with exclusion criteria: {exclusion_criteria}")
     logger.info(f"Data extraction schema: {data_extraction_schema}")
     logger.info(f"Ranking guidance: {ranking_guidance}")
 
-    analysis = RequestAnalysis(
-        query=query,
-        ranking_guidance=ranking_guidance,
-        parameters={
-            "num_queries": num_queries,
-            "papers_per_query": papers_per_query,
-            "num_papers_to_return": num_papers_to_return
-        }
-    )
-
     # Determine which platforms to use.
     default_platforms = ["openalex", "scopus", "core", "arxiv"]
     if config and "search" in config and "platforms" in config["search"]:
         default_platforms = config["search"]["platforms"]
-    analysis.parameters["platforms"] = default_platforms
 
-    try:
+    # Handle multiple queries vs single query
+    if isinstance(query, list):
+        # Multi-query scenario
+        analysis = RequestAnalysis(
+            query="(multiple user queries)",
+            ranking_guidance=ranking_guidance,
+            parameters={
+                "num_queries": num_queries,
+                "papers_per_query": papers_per_query,
+                "num_papers_to_return": num_papers_to_return,
+                "platforms": default_platforms
+            }
+        )
+
         if exclusion_criteria:
-            ExclusionCriteriaModel = create_model_from_schema('ExclusionCriteria', exclusion_criteria)
-            analysis.exclusion_schema = ExclusionCriteriaModel
-
+            ExclusionModel = create_model_from_schema('ExclusionCriteria', exclusion_criteria)
+            analysis.exclusion_schema = ExclusionModel
         if data_extraction_schema:
-            ExtractionSchemaModel = create_model_from_schema('DataExtractionSchema', data_extraction_schema)
-            analysis.data_extraction_schema = ExtractionSchemaModel
+            ExtractionModel = create_model_from_schema('DataExtractionSchema', data_extraction_schema)
+            analysis.data_extraction_schema = ExtractionModel
+
+        # For each user query, set analysis.query and perform search and exclusion
+        for q in query:
+            analysis.query = q
+            await _search_and_exclude(analysis)
+
+        # Once all queries are processed, perform ranking on aggregated results
+        await _rank_papers(analysis)
+        return analysis
+    else:
+        # Single query scenario
+        analysis = RequestAnalysis(
+            query=query,
+            ranking_guidance=ranking_guidance,
+            parameters={
+                "num_queries": num_queries,
+                "papers_per_query": papers_per_query,
+                "num_papers_to_return": num_papers_to_return,
+                "platforms": default_platforms
+            }
+        )
+
+        if exclusion_criteria:
+            ExclusionModel = create_model_from_schema('ExclusionCriteria', exclusion_criteria)
+            analysis.exclusion_schema = ExclusionModel
+        if data_extraction_schema:
+            ExtractionModel = create_model_from_schema('DataExtractionSchema', data_extraction_schema)
+            analysis.data_extraction_schema = ExtractionModel
 
         await _perform_analysis(analysis)
-    except Exception as e:
-        logger.error(f"Error during request analysis: {str(e)}", exc_info=True)
-        analysis.metadata["error"] = str(e)
-
-    return analysis
+        return analysis
 
 def create_model_from_schema(model_name: str, schema: Dict[str, Any]) -> Type[BaseModel]:
     annotations = {}
@@ -136,12 +161,15 @@ def create_model_from_schema(model_name: str, schema: Dict[str, Any]) -> Type[Ba
 
     return type(model_name, (BaseModel,), namespace)
 
-async def _perform_analysis(analysis: RequestAnalysis) -> None:
+async def _search_and_exclude(analysis: RequestAnalysis) -> None:
+    """Helper function to perform query formulation, searching, and applying exclusion criteria."""
     await _formulate_queries(analysis)
     await _perform_searches(analysis)
-    if analysis.search_results:
-        await _apply_exclusion_criteria(analysis)
-        await _rank_papers(analysis)
+    await _apply_exclusion_criteria(analysis)
+
+async def _perform_analysis(analysis: RequestAnalysis) -> None:
+    await _search_and_exclude(analysis)
+    await _rank_papers(analysis)
 
 async def _formulate_queries(analysis: RequestAnalysis) -> None:
     chosen_platforms = analysis.parameters.get("platforms", ["openalex", "scopus", "core", "arxiv"])

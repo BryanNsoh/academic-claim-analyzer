@@ -7,7 +7,7 @@ import json
 import logging
 import asyncio
 from typing import List, Dict, Any, Optional, Type
-from pydantic import BaseModel, Field, create_model
+from pydantic import BaseModel, Field
 
 from llmhandler.api_handler import UnifiedLLMHandler
 logger = logging.getLogger(__name__)
@@ -18,7 +18,7 @@ llm_handler = UnifiedLLMHandler(requests_per_minute=2000)
 def get_model_or_default(override_model: Optional[str] = None) -> str:
     return override_model if override_model else DEFAULT_LLM_MODEL
 
-# Ranking + Analysis Pydantic
+# Ranking + Analysis Pydantic models
 class Ranking(BaseModel):
     paper_id: str = Field(description="Unique ID for the paper")
     rank: int = Field(description="Rank (1 is most relevant)")
@@ -34,7 +34,6 @@ class AnalysisResponse(BaseModel):
 # Models
 from .models import Paper, RankedPaper
 
-# Main entry point
 async def rank_papers(
     papers: List[Paper],
     query: str,
@@ -77,7 +76,7 @@ async def rank_papers(
     top_papers = sorted_by_score[:top_n]
 
     # Detailed analysis for each top paper executed concurrently
-    analysis_tasks = [ _process_top_paper(paper, query, ranking_guidance, average_scores) for paper in top_papers ]
+    analysis_tasks = [_process_top_paper(paper, query, ranking_guidance, average_scores) for paper in top_papers]
     analysis_results = await asyncio.gather(*analysis_tasks, return_exceptions=True)
     ranked_results = []
     for result in analysis_results:
@@ -231,7 +230,7 @@ Return a valid JSON object of type AnalysisResponse. Ensure that the JSON contai
         return None
     return single_result.data
 
-async def _process_top_paper(paper: Paper, query: str, ranking_guidance: str, average_scores: Dict[str, List[float]]) -> Optional[RankedPaper]:
+async def _process_top_paper(paper: Paper, query: str, ranking_guidance: str, average_scores: Dict[str, float]) -> Optional[RankedPaper]:
     try:
         analysis_obj = await _get_paper_analysis(paper, query, ranking_guidance)
         if not analysis_obj:
@@ -250,92 +249,6 @@ async def _process_top_paper(paper: Paper, query: str, ranking_guidance: str, av
     except Exception as e:
         logger.error(f"Error processing top paper {paper.title[:100]}: {str(e)}")
         return None
-
-async def _evaluate_paper(
-    paper: Paper,
-    exclusion_schema: Optional[Type[BaseModel]],
-    extraction_schema: Optional[Type[BaseModel]]
-) -> Dict[str, Dict[str, Any]]:
-    if not (exclusion_schema or extraction_schema):
-        return {}
-
-    CombinedModel = _create_combined_model(exclusion_schema, extraction_schema)
-
-    prompt = f"""
-You are an expert in academic paper evaluation. Your task is to assess a given paper against a defined schema that includes exclusion criteria and data extraction requirements.
-
-Paper Title: {paper.title}
-Paper Content: {paper.full_text if paper.full_text else ''}
-
-Schema for Evaluation:
-{json.dumps(CombinedModel.model_json_schema(), indent=2)}
-
-Instructions:
-1. Review the 'Schema for Evaluation' to understand the exclusion criteria and data extraction fields.
-2. Read the 'Paper Content' to evaluate it against each criterion in the schema.
-3. For each field in the schema:
-    - If it is an exclusion criterion, determine if the paper meets the criterion (True/False).
-    - If it is a data extraction field, extract the requested information from the paper content. If the information is not available, use default values as defined in schema description.
-4. Ensure your output is a valid JSON object that strictly adheres to the schema. Do not include any extraneous fields or text outside the JSON.
-"""
-    result = await llm_handler.process(
-        prompts=prompt,
-        model=get_model_or_default(None),
-        response_type=CombinedModel
-    )
-    if not result.success:
-        logger.error(f"Evaluation error for {paper.title[:50]}: {result.error}")
-        return {
-            'exclusion_criteria_result': {},
-            'extracted_data': {}
-        }
-
-    obj = result.data
-    exclusion_part = {}
-    extraction_part = {}
-
-    if exclusion_schema:
-        for f in exclusion_schema.model_fields:
-            val = getattr(obj, f, None)
-            if isinstance(val, bool):
-                exclusion_part[f] = val
-
-    if extraction_schema:
-        for f in extraction_schema.model_fields:
-            extraction_part[f] = getattr(obj, f, None)
-
-    return {
-        'exclusion_criteria_result': exclusion_part,
-        'extracted_data': extraction_part
-    }
-
-def _create_combined_model(
-    exclusion_schema: Optional[Type[BaseModel]],
-    extraction_schema: Optional[Type[BaseModel]]
-) -> Type[BaseModel]:
-    if not exclusion_schema and not extraction_schema:
-        return create_model("EmptyModel")
-
-    ann = {}
-    fields = {}
-    from pydantic import Field
-
-    if exclusion_schema:
-        for name, f in exclusion_schema.model_fields.items():
-            ann[name] = f.annotation
-            fields[name] = Field(..., description=f.description or "Exclusion")
-
-    if extraction_schema:
-        for name, f in extraction_schema.model_fields.items():
-            ann[name] = f.annotation
-            fields[name] = Field(..., description=f.description or "Extraction")
-
-    new_model = create_model(
-        "CombinedModel",
-        __annotations__=ann,
-        **fields
-    )
-    return new_model
 
 async def _get_bibtex(paper: Paper) -> str:
     from .search.bibtex import get_bibtex_from_doi, get_bibtex_from_title

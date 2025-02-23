@@ -24,7 +24,7 @@ class ArxivSearch(BaseSearch):
     def __init__(self):
         # You can add any settings or rate-limit semaphores if desired
         self.base_url = "http://export.arxiv.org/api/query"
-        self.semaphore = asyncio.Semaphore(5)  # limit concurrency as needed
+        self.semaphore = asyncio.Semaphore(1)  # arxiv requests only allow 1 per 3 seconds
 
     async def search(self, query: str, limit: int = 30) -> List[Paper]:
         """

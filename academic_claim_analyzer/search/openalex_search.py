@@ -19,7 +19,7 @@ class OpenAlexSearch(BaseSearch):
     def __init__(self, email: str):
         self.base_url = "https://api.openalex.org"
         self.email = email
-        self.semaphore = asyncio.Semaphore(5)
+        self.semaphore = asyncio.Semaphore(10)
 
     def _validate_url(self, url: str) -> bool:
         """Validate if the provided URL is a valid OpenAlex API URL."""

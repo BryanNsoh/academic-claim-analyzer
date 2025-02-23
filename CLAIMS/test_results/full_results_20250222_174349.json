@@ -1,0 +1,19 @@
+{
+  "basic_ml_yield_request": {
+    "query": "Deep learning approaches for predicting crop yields",
+    "ranking_guidance": "Prioritize recent studies and empirical evaluations.",
+    "timestamp": "2025-02-22T23:39:14.984303",
+    "parameters": {
+      "num_queries": 2,
+      "papers_per_query": 3,
+      "num_papers_to_return": 2,
+      "platforms": [
+        "core",
+        "arxiv"
+      ]
+    },
+    "queries": [
+      {
+        "query": "title:(\"machine learning\" AND \"crop yield\") AND abstract:(\"machine learning\" AND \"crop yield prediction\")",
+        "source": "core",
+        "timestamp": 

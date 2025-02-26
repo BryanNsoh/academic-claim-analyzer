@@ -1,22 +1,16 @@
 # academic_claim_analyzer/paper_ranker.py
 
-import os
 import random
 import math
-import json
 import logging
 import asyncio
 from typing import List, Dict, Any, Optional, Type
 from pydantic import BaseModel, Field
 
-from llmhandler.api_handler import UnifiedLLMHandler
+from .llm_handler_config import llm_handler
+from .models import Paper, RankedPaper
+
 logger = logging.getLogger(__name__)
-
-DEFAULT_LLM_MODEL = os.getenv("DEFAULT_LLM_MODEL", "google-gla:gemini-2.0-flash-001")
-llm_handler = UnifiedLLMHandler(requests_per_minute=2000)
-
-def get_model_or_default(override_model: Optional[str] = None) -> str:
-    return override_model if override_model else DEFAULT_LLM_MODEL
 
 # Ranking + Analysis Pydantic models
 class Ranking(BaseModel):
@@ -30,9 +24,6 @@ class RankingResponse(BaseModel):
 class AnalysisResponse(BaseModel):
     analysis: str = Field(description="Detailed analysis of the paper's relevance")
     relevant_quotes: List[str] = Field(description="List of relevant quotes")
-
-# Models
-from .models import Paper, RankedPaper
 
 async def rank_papers(
     papers: List[Paper],
@@ -49,8 +40,19 @@ async def rank_papers(
     1) Do multi-round partial ranking (all rounds are run concurrently)
     2) Sort by aggregated score
     3) Do a deeper analysis pass for the top papers (also executed concurrently)
+    
+    Args:
+        papers: List of papers to rank
+        query: User query
+        ranking_guidance: Guidance for ranking papers
+        exclusion_schema: Schema for excluding papers
+        data_extraction_schema: Schema for extracting data from papers
+        top_n: Number of top papers to return
+        
+    Returns:
+        List of RankedPaper objects
     """
-    logger.info(f"Starting to rank {len(papers)} papers using model {DEFAULT_LLM_MODEL}.")
+    logger.info(f"Starting to rank {len(papers)} papers")
     logger.info(f"User ranking guidance: {ranking_guidance!r}")
 
     valid_papers = [p for p in papers if p.full_text and len(p.full_text.split()) >= 200]
@@ -89,6 +91,7 @@ async def rank_papers(
     return ranked_results
 
 def calculate_ranking_rounds(num_papers: int) -> int:
+    """Calculate the number of ranking rounds based on the number of papers."""
     if num_papers <= 8:
         return 3
     return min(8, math.floor(math.log(num_papers, 1.4)) + 2)
@@ -100,6 +103,19 @@ async def _conduct_ranking_rounds(
     num_rounds: int,
     paper_scores: Dict[str, List[float]]
 ) -> Dict[str, float]:
+    """
+    Conduct multiple rounds of ranking to determine paper relevance.
+    
+    Args:
+        valid_papers: List of papers to rank
+        query: User query
+        ranking_guidance: Guidance for ranking
+        num_rounds: Number of ranking rounds to conduct
+        paper_scores: Dictionary to store scores
+        
+    Returns:
+        Dictionary mapping paper IDs to average scores
+    """
     async def run_round(round_idx: int) -> Dict[str, List[float]]:
         round_scores = {}
         logger.info(f"Ranking round {round_idx+1}/{num_rounds}")
@@ -109,7 +125,6 @@ async def _conduct_ranking_rounds(
 
         call_result = await llm_handler.process(
             prompts=prompts,
-            model=get_model_or_default(None),
             response_type=RankingResponse
         )
         if not call_result.success or not isinstance(call_result.data, list):
@@ -141,6 +156,17 @@ async def _conduct_ranking_rounds(
     return avg_scores
 
 def create_balanced_groups(papers: List[Paper], min_size: int, max_size: int) -> List[List[Paper]]:
+    """
+    Create balanced groups of papers for ranking.
+    
+    Args:
+        papers: List of papers to group
+        min_size: Minimum group size
+        max_size: Maximum group size
+        
+    Returns:
+        List of paper groups
+    """
     num_papers = len(papers)
     if num_papers <= min_size:
         return [papers]
@@ -165,6 +191,17 @@ def create_balanced_groups(papers: List[Paper], min_size: int, max_size: int) ->
         return [papers]
 
 def _create_ranking_prompt(group: List[Paper], query: str, ranking_guidance: str) -> str:
+    """
+    Create a prompt for ranking a group of papers.
+    
+    Args:
+        group: Group of papers to rank
+        query: User query
+        ranking_guidance: Guidance for ranking
+        
+    Returns:
+        Prompt for ranking
+    """
     lines = []
     for p in group:
         lines.append(f"Paper ID: {p.id}\nTitle: {p.title}\nContent: {p.full_text}\n")
@@ -195,6 +232,17 @@ Ensure unique ranks from 1 to {len(group)} are used. Focus on clear, concise exp
     return prompt.strip()
 
 async def _get_paper_analysis(paper: Paper, query: str, ranking_guidance: str) -> Optional[AnalysisResponse]:
+    """
+    Get a detailed analysis of a paper's relevance to a query.
+    
+    Args:
+        paper: Paper to analyze
+        query: User query
+        ranking_guidance: Guidance for analysis
+        
+    Returns:
+        AnalysisResponse object or None if analysis fails
+    """
     prompt = f"""
 You are an expert in academic literature analysis. Your task is to evaluate the relevance of a given paper to a specific research query and provide a detailed analysis.
 
@@ -222,7 +270,6 @@ Return a valid JSON object of type AnalysisResponse. Ensure that the JSON contai
 """
     single_result = await llm_handler.process(
         prompts=prompt,
-        model=get_model_or_default(None),
         response_type=AnalysisResponse
     )
     if not single_result.success:
@@ -231,6 +278,18 @@ Return a valid JSON object of type AnalysisResponse. Ensure that the JSON contai
     return single_result.data
 
 async def _process_top_paper(paper: Paper, query: str, ranking_guidance: str, average_scores: Dict[str, float]) -> Optional[RankedPaper]:
+    """
+    Process a top paper by analyzing it and creating a RankedPaper object.
+    
+    Args:
+        paper: Paper to process
+        query: User query
+        ranking_guidance: Guidance for ranking
+        average_scores: Dictionary mapping paper IDs to scores
+        
+    Returns:
+        RankedPaper object or None if processing fails
+    """
     try:
         analysis_obj = await _get_paper_analysis(paper, query, ranking_guidance)
         if not analysis_obj:
@@ -251,6 +310,15 @@ async def _process_top_paper(paper: Paper, query: str, ranking_guidance: str, av
         return None
 
 async def _get_bibtex(paper: Paper) -> str:
+    """
+    Get BibTeX citation for a paper.
+    
+    Args:
+        paper: Paper to get citation for
+        
+    Returns:
+        BibTeX citation string
+    """
     from .search.bibtex import get_bibtex_from_doi, get_bibtex_from_title
     if paper.doi:
         bib = get_bibtex_from_doi(paper.doi)

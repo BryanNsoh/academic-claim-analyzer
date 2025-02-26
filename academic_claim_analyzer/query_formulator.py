@@ -4,7 +4,7 @@ from typing import List
 import logging
 from pydantic import BaseModel, Field
 
-from .paper_ranker import llm_handler, get_model_or_default
+from .llm_handler_config import llm_handler
 logger = logging.getLogger(__name__)
 
 SCOPUS_SEARCH_GUIDE = """
@@ -99,7 +99,7 @@ ARXIV_SEARCH_GUIDE = """
 ArXiv uses natural language queries in the form of plain strings
 Focus on purely natural language or minimal formatting.
 ArXiv does not have a deeply complex advanced syntax like Scopus.
-We simply want multiple variations or angles on the user’s query
+We simply want multiple variations or angles on the user's query
 to capture different aspects of the topic.
 """
 
@@ -109,6 +109,30 @@ Similar to advanced boolean expressions.
 We want multiple angles to discover relevant papers.
 Use synonyms, phrases, parentheses, and boolean operators
 to generate diverse queries for CORE.
+"""
+
+SEMANTIC_SCHOLAR_SEARCH_GUIDE = """
+Semantic Scholar accepts natural language search queries.
+Focus on creating comprehensive, information-rich queries
+that capture the full context and intent of the research
+question. Since Semantic Scholar uses advanced AI techniques
+for search, rich and comprehensive queries work better than
+multiple narrow ones.
+
+Your queries should:
+1. Include all key concepts from the original query
+2. Add relevant synonyms or related terms
+3. Specify important contextual details
+4. Maintain focus on the core research question
+
+Example natural language queries:
+{
+  "queries": [
+    "The impact of climate change on agricultural productivity with a focus on drought resilience and adaptation strategies in developing countries",
+    "Machine learning applications for precision agriculture focusing on crop yield prediction and disease detection using computer vision and sensor data",
+    "Effectiveness of cognitive behavioral therapy compared to medication for treating anxiety disorders in adolescents based on longitudinal studies"
+  ]
+}
 """
 
 GENERATE_QUERIES = """
@@ -124,7 +148,7 @@ Number of Queries to Generate: {NUM_QUERIES}
 
 Instructions:
 1. Understand the User Research Query. Identify the core concepts, keywords, and nuances of the research topic.
-2. Review the Search Platform Guidance. This guidance provides specific syntax, operators, and best practices for formulating effective queries on the target database platform (e.g., Scopus, OpenAlex, ArXiv, CORE).
+2. Review the Search Platform Guidance. This guidance provides specific syntax, operators, and best practices for formulating effective queries on the target database platform (e.g., Scopus, OpenAlex, ArXiv, CORE, Semantic Scholar).
 3. Generate {NUM_QUERIES} distinct search queries. Each query should represent a unique approach to searching for relevant articles. Consider variations in:
     - Keywords: Use synonyms, related terms, and broader or narrower concepts.
     - Phrase variations: Explore different phrasing and combinations of keywords.
@@ -152,7 +176,7 @@ class QueryResponse(BaseModel):
 
 async def formulate_queries(user_query: str, num_queries: int, query_type: str) -> List[str]:
     """
-    Generate search queries for a specific platform (scopus, openalex, arxiv, core).
+    Generate search queries for a specific platform (scopus, openalex, arxiv, core, semantic_scholar).
     """
     if query_type.lower() == 'scopus':
         search_guidance = SCOPUS_SEARCH_GUIDE
@@ -162,6 +186,8 @@ async def formulate_queries(user_query: str, num_queries: int, query_type: str) 
         search_guidance = ARXIV_SEARCH_GUIDE
     elif query_type.lower() == 'core':
         search_guidance = CORE_SEARCH_GUIDE
+    elif query_type.lower() == 'semantic_scholar':
+        search_guidance = SEMANTIC_SCHOLAR_SEARCH_GUIDE
     else:
         raise ValueError(f"Unsupported query type: {query_type}")
 
@@ -173,7 +199,7 @@ async def formulate_queries(user_query: str, num_queries: int, query_type: str) 
 
     result = await llm_handler.process(
         prompts=prompt,
-        model=get_model_or_default(None),
+
         response_type=QueryResponse
     )
 

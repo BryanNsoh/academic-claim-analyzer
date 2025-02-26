@@ -19,8 +19,8 @@ def analyze_request(*args, **kwargs):
     Thin wrapper to import the real analyze_request at runtime
     to avoid circular imports.
     """
-    from . import get_analyze_request
-    return get_analyze_request()(*args, **kwargs)
+    from .main import analyze_research_request
+    return analyze_research_request(*args, **kwargs)
 
 class BatchProcessorConfig:
     """Configuration container for batch processing settings."""
@@ -37,7 +37,7 @@ class BatchProcessorConfig:
 
         # Search settings
         search = config_data.get('search', {})
-        self.search_platforms = search.get('platforms', ['openalex', 'scopus', 'core', 'arxiv'])
+        self.search_platforms = search.get('platforms', ['openalex', 'scopus', 'core', 'arxiv', 'semantic_scholar'])
         self.min_year = search.get('min_year', None)
         self.max_year = search.get('max_year', None)
 

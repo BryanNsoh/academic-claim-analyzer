@@ -1,0 +1,303 @@
+config:
+  processing:
+    # We want extensive coverage yet still manageable
+    # We'll generate 10 queries per request, each retrieving 12 papers, giving up to ~120 hits/request
+    num_queries: 10
+    papers_per_query: 12
+
+    # We'll keep the top 15 after ranking to have enough data for thorough review
+    num_papers_to_return: 15
+
+  logging:
+    level: DEBUG
+
+  search:
+    platforms:
+      - openalex
+      - scopus
+      - core
+      - arxiv
+      - semantic_scholar
+    min_year: 2000
+    max_year: 2025
+
+requests:
+
+  # 1. IoT-based irrigation solutions
+  - id: iot_precision_irrigation
+    queries:
+      - "IoT-based sensor networks specifically for agricultural irrigation scheduling to reduce water use"
+      - "Implementations of real-time IoT solutions in precision irrigation management with field trials"
+      - "LoRaWAN or low-power wireless systems for monitoring soil moisture in irrigation control"
+      - "Case studies of IoT irrigation with data-driven scheduling in commercial crop fields"
+      - "Comparative analyses of IoT-based irrigation vs conventional methods in agriculture"
+      - "Practical power management and solar energy solutions for IoT irrigation sensor nodes"
+      - "Quantified improvements in water efficiency from IoT-based irrigation systems"
+      - "Large-scale deployments of sensor-actuator networks for farmland irrigation"
+      - "Integration of weather stations and soil probes in IoT for adaptive irrigation scheduling"
+      - "Economic cost-benefit analysis of deploying IoT sensors for field irrigation"
+    ranking_guidance: >
+      1. This request is ONLY about IoT-based solutions for precision irrigation
+         scheduling in agriculture. Papers must explicitly mention using IoT
+         (or sensor networks) for water/irrigation management of crops.
+      2. Highest rank if the paper describes a real or pilot-scale deployment in actual
+         agricultural settings (field or greenhouse) with measured outcomes (e.g., water saved).
+      3. Mid-rank if the system is described with partial implementation or simulations, 
+         but still specifically for irrigation scheduling in agriculture.
+      4. Irrelevant or extremely low rank if IoT is used for something else (like pest control,
+         greenhouse climate monitoring with no mention of irrigation scheduling, or a different domain).
+      5. Prefer studies that report numeric metrics (water-use reduction, yield changes, or 
+         cost feasibility). If no performance data is provided, rank it lower.
+      6. Real commercial-scale or multi-farm scale IoT deployments rank at the top. 
+      7. Must mention agriculture or crop irrigation—purely theoretical frameworks or 
+         environmental IoT not controlling irrigation are bottom-ranked.
+    exclusion_criteria:
+      not_irrigation:
+        type: boolean
+        description: "Exclude if paper focuses on IoT in agriculture but NOT for irrigation scheduling or water management."
+      no_metrics:
+        type: boolean
+        description: "Exclude if the paper fails to mention any performance, water saving, or real deployment details."
+
+    information_extraction:
+      water_savings:
+        type: float
+        description: "Percentage or fraction of water savings or efficiency improvement vs. baseline"
+      communication_protocols:
+        type: list
+        description: "Which wireless protocols (LoRa, NB-IoT, Zigbee, etc.) were used?"
+      power_solution:
+        type: string
+        description: "How sensor nodes are powered (solar, battery, mains, etc.)"
+      scale_of_study:
+        type: string
+        description: "Field scale, greenhouse, or lab?"
+      cost_analysis:
+        type: boolean
+        description: "Does the paper include cost or ROI analysis for IoT-based irrigation?"
+
+
+  # 2. Fuzzy logic for irrigation scheduling
+  - id: fuzzy_logic_irrigation
+    queries:
+      - "Fuzzy logic specifically for agricultural irrigation scheduling with real or pilot-scale data"
+      - "Mamdani or Sugeno fuzzy inference controlling crop water application in the field"
+      - "Comparison of fuzzy-based irrigation vs threshold or PID controllers in crops"
+      - "Case studies using fuzzy membership functions for soil moisture or canopy temperature"
+      - "Performance metrics (water savings, yield improvement) from fuzzy irrigation in agriculture"
+      - "Adaptive fuzzy irrigation scheduling: membership function definitions and real-world testing"
+      - "Implementation details of fuzzy rule-based irrigation in commercial farms or large plots"
+      - "Fuzzy logic approach for minimizing water consumption in irrigated crops with real data"
+      - "Empirical validation of fuzzy irrigation scheduling methods over multiple growing seasons"
+      - "Hybrid fuzzy systems integrating soil moisture, weather, or canopy data for irrigation"
+    ranking_guidance: >
+      1. We only want fuzzy logic solutions for irrigation scheduling in agriculture.
+         If a paper does not explicitly confirm it applies fuzzy logic to 
+         agricultural water management or irrigation scheduling, it must go low or 
+         be excluded.
+      2. Top rank if it involves real-world or pilot-scale demonstration with 
+         crops, specifying membership functions, rule sets, or performance metrics 
+         like water savings or yield changes.
+      3. Studies that compare fuzzy-based irrigation with other scheduling methods 
+         (e.g., threshold-based, ET-based, or PID) and present quantitative results 
+         rank higher.
+      4. If it's purely conceptual with no performance data or no mention 
+         of actual irrigation scheduling, rank it low.
+      5. Must mention "fuzzy logic" or "fuzzy inference" plus "irrigation" 
+         or "water scheduling" for an agricultural crop. If it’s fuzzy logic 
+         for pest control or fertilization only, rank near bottom.
+      6. The more detail on membership functions, rules, or 
+         fuzzy system design, the higher. 
+      7. Large-scale or greenhouse-scale with real data outranks 
+         small-lab or purely simulated contexts.
+    exclusion_criteria:
+      no_explicit_irrigation:
+        type: boolean
+        description: "Exclude if fuzzy logic is used for agriculture tasks but not irrigation scheduling."
+      no_method_detail:
+        type: boolean
+        description: "Exclude if the paper does not detail the fuzzy approach or fails to show any real or simulated results."
+
+    information_extraction:
+      fuzzy_inference_type:
+        type: string
+        description: "Which fuzzy approach? Mamdani, Sugeno, etc."
+      rule_base_count:
+        type: integer
+        description: "Number of fuzzy if-then rules, if stated"
+      performance_metrics:
+        type: string
+        description: "Reported results: water savings, yield improvement, or other"
+      scale_of_implementation:
+        type: string
+        description: "Field scale, greenhouse scale, lab, or simulation only?"
+      crops_tested:
+        type: string
+        description: "Which crops or crop type is the fuzzy system applied to?"
+
+
+  # 3. CWSI + SWSI integration for irrigation
+  - id: cwsi_swsi_integration
+    queries:
+      - "Integration of Crop Water Stress Index (CWSI) and Soil Water Stress Index (SWSI) for irrigation scheduling"
+      - "Real field usage of canopy temperature (CWSI) + soil moisture (SWSI) in crop water management"
+      - "Comparative studies: CWSI-based vs SWSI-based vs combined triggers for irrigation"
+      - "Infrared thermometry or IR radiometers to measure canopy temperature for CWSI in farmland"
+      - "Multi-depth soil moisture sensors for SWSI calculation in real irrigation scenarios"
+      - "Empirical correlation of CWSI and SWSI in controlling irrigation for corn or other crops"
+      - "Pilot or large-scale trials combining canopy and soil moisture indices to schedule irrigation"
+      - "Accuracy and reliability of CWSI vs SWSI in different climatic conditions for water stress detection"
+      - "Case studies on sensor fusion of IR canopy measurements and soil moisture for real-time irrigation"
+      - "Performance metrics: yield, water savings, or stress reduction from integrated CWSI+SWSI approach"
+    ranking_guidance: >
+      1. Papers must explicitly mention both CWSI (canopy temperature-based) 
+         AND SWSI (soil moisture-based) used together or in comparison for irrigation scheduling.
+      2. Highest rank if there's a real farm or greenhouse scenario with 
+         actual sensor data, specifying how both indices are computed 
+         and how they drive irrigation decisions.
+      3. Studies only discussing canopy temperature but not SWSI 
+         OR only discussing soil water stress index without canopy measurement 
+         can rank if they mention irrigation scheduling, but are lower priority 
+         than those integrating both.
+      4. Must reference actual crop water management or scheduling 
+         of irrigation. If it’s purely theoretical or a different domain 
+         (like industrial or orchard cooling not related to water management), rank low.
+      5. Numeric performance metrics or outcomes (water-use reduction, yield improvements) 
+         are crucial for top ranking.
+      6. Must be about agriculture. If they measure canopy temperature for non-agricultural 
+         contexts, that’s out.
+      7. Large-scale or multi-season field data is top tier. 
+         Single-lab or purely model-based with no real crop is mid-tier at best.
+    exclusion_criteria:
+      only_cwsi_no_swsi:
+        type: boolean
+        description: "Exclude if the paper focuses on canopy temperature alone with zero mention of SWSI or soil-based stress index."
+      only_swsi_no_cwsi:
+        type: boolean
+        description: "Exclude if the paper focuses on SWSI alone with no mention of canopy temperature or CWSI."
+      no_irrigation_focus:
+        type: boolean
+        description: "Exclude if the paper does not tie the stress indices to actual irrigation scheduling or water management decisions."
+    information_extraction:
+      sensor_hardware:
+        type: string
+        description: "IR radiometer brand for canopy temperature, TDR or other sensors for soil moisture"
+      combined_approach:
+        type: boolean
+        description: "Does the paper actively combine CWSI and SWSI for a single scheduling approach?"
+      performance_outcome:
+        type: string
+        description: "Key results: water saved, yield maintained, stress reduced, etc."
+      crop_type:
+        type: string
+        description: "Corn, wheat, orchard, or other specific crops"
+      scale_and_duration:
+        type: string
+        description: "Field scale, greenhouse scale, number of seasons tested, etc."
+
+
+  # 4. ML-based irrigation scheduling
+  - id: ml_based_irrigation
+    queries:
+      - "Machine learning models (RF, ANN, LSTM) for real-time irrigation scheduling in crops"
+      - "Predictive analytics for soil moisture or ET to automate watering in agriculture"
+      - "Empirical comparisons of ML-based irrigation vs standard threshold or ET-based approaches"
+      - "Field deployment of AI or ML for scheduling irrigation with real yield/water data"
+      - "Time-series forecasting for crop water needs using neural networks in farmland"
+      - "Case studies: machine learning controlling irrigation amount or timing with measured results"
+      - "Integration of remote sensing or weather data with ML for water-saving irrigation"
+      - "Deployment challenges of ML irrigation in large-scale commercial farms"
+      - "Multi-sensor data fusion in ML-based irrigation systems with real performance metrics"
+      - "Economic impacts or cost-benefit analyses of ML-driven irrigation scheduling"
+    ranking_guidance: >
+      1. We only want machine learning approaches applied specifically 
+         to irrigation scheduling or water management in agriculture.
+      2. Must mention a real dataset or actual field data used to train 
+         or validate the ML model, or a large historical dataset for a real crop scenario.
+      3. High priority if the paper compares multiple ML methods (RF, ANN, CNN, LSTM, XGBoost, etc.) 
+         with numeric performance or water savings. 
+      4. If it's purely hypothetical ML with no actual application in irrigation, rank low.
+      5. Must explicitly mention controlling or guiding irrigation amounts/frequency 
+         or some direct scheduling aspect. If it’s ML to predict yield 
+         with no tie to irrigation decisions, rank it lower.
+      6. Real-world or pilot-scale in farmland outranks greenhouse or purely simulated data. 
+         However, greenhouse is still relevant if they mention actual irrigation scheduling for plants.
+      7. Prefer papers with quantifiable improvements: water saved, yield gain, cost reduction.
+    exclusion_criteria:
+      no_real_irrigation_context:
+        type: boolean
+        description: "Exclude if the ML is for general ag analytics but not for irrigation scheduling or water management."
+      purely_theoretical_ml:
+        type: boolean
+        description: "Exclude if only a conceptual ML model without real or historical dataset for irrigation decisions."
+    information_extraction:
+      ml_algorithms_used:
+        type: list
+        description: "Which ML methods? (RF, XGBoost, CNN, LSTM, etc.)"
+      dataset_size_and_source:
+        type: string
+        description: "Brief mention of how big the dataset is and from where (field sensors, weather data, etc.)"
+      performance_measures:
+        type: string
+        description: "MAE, RMSE for moisture or water usage, or direct water-saving metrics"
+      real_world_deployment:
+        type: boolean
+        description: "True if actually deployed in a field or greenhouse"
+      cost_benefit_analysis:
+        type: boolean
+        description: "Paper includes some economic feasibility or ROI discussion"
+
+
+  # 5. Integrated advanced approaches
+  - id: integrated_approaches_comprehensive
+    queries:
+      - "Fully integrated irrigation systems combining IoT sensors, fuzzy logic, and ML scheduling"
+      - "Multi-factor irrigation scheduling with canopy temperature (CWSI), soil moisture, and advanced analytics"
+      - "Case studies: real-time sensor fusion (soil moisture + canopy temperature) plus ML or fuzzy for irrigation"
+      - "Hybrid irrigation control: threshold triggers, ML predictions, fuzzy adjustments in agriculture"
+      - "Large-scale demos of combined IoT, ML, fuzzy logic for precise water management in crops"
+      - "Comparison of multiple advanced approaches (IoT-based fuzzy, ML-based decisions, standard ET) in one framework"
+      - "End-to-end irrigation management with real-time data from multi-sensors and intelligent control algorithms"
+      - "Practical challenges in combining canopy-based, soil-based, and ML-driven irrigation for water savings"
+      - "Performance outcomes from integrated sensor networks + intelligence (fuzzy or ML) in field irrigation"
+      - "Economic and agronomic benefits of advanced integrated irrigation solutions with sensor fusion"
+    ranking_guidance: >
+      1. We want truly integrated or hybrid approaches for irrigation scheduling, 
+         meaning at least two advanced techniques together (e.g. IoT + ML, IoT + fuzzy, 
+         or canopy + soil sensor + advanced logic).
+      2. Papers must explicitly mention scheduling or controlling irrigation in 
+         an agricultural setting (crops in fields or greenhouses). 
+         If it’s just a conceptual multi-method design with no mention of actual irrigation, rank low.
+      3. Highest rank if real or pilot-scale data is used, with sensors and at least 
+         one advanced algorithm (fuzzy logic or ML) actually implemented.
+      4. Mid-rank if it’s partial: e.g., they have IoT + fuzzy but only a lab test 
+         or purely theoretical. They still mention “irrigation scheduling,” so keep them but lower.
+      5. Must provide some performance or validation metric: water savings, yield, cost, 
+         or at least a measured accuracy. If no results at all, rank near bottom.
+      6. If they use CWSI + SWSI or multi-sensor data plus an advanced approach (fuzzy or ML), 
+         that is prime. 
+      7. Hard exclude or bottom rank if the paper merges advanced methods but 
+         not for irrigation scheduling (like ML + fuzzy for livestock feeding or orchard pest control).
+    exclusion_criteria:
+      partial_only_no_irrigation:
+        type: boolean
+        description: "Exclude if it merges advanced methods but not in the context of irrigation scheduling."
+      no_validation_data:
+        type: boolean
+        description: "Exclude if there's zero mention of real data or performance metrics for water management."
+    information_extraction:
+      integrated_methods:
+        type: list
+        description: "Which advanced methods are combined? (IoT, fuzzy, ML, CWSI, SWSI, etc.)"
+      reported_performance:
+        type: string
+        description: "Outcome metrics: water savings, yield changes, cost, or reliability"
+      scale_and_region:
+        type: string
+        description: "Field location or region, scale (multi-acre, greenhouse, small pilot, etc.)"
+      hardware_or_tech_stack:
+        type: string
+        description: "Any mention of specific hardware, sensors, or cloud services used"
+      novelty_claim:
+        type: string
+        description: "Any unique or self-declared novelty the paper claims to have"

@@ -305,5 +305,5 @@ def batch_analyze_requests(yaml_file: str) -> None:
 if __name__ == "__main__":
     # Example usage / test
     batch_analyze_requests(
-        r"C:\Users\bryan\OneDrive\Documents\Projects\ACADEMIC LITERATURE UTILITIES\academic-claim-analyzer\CLAIMS\test.yaml"
+        r"C:\Users\bryan\OneDrive\Documents\Projects\ACADEMIC LITERATURE UTILITIES\academic-claim-analyzer\queries\kendall_edits.yaml"
     )

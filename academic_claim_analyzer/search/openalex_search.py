@@ -13,16 +13,18 @@ from ..paper_scraper import UnifiedWebScraper
 import logging
 import json
 
+from ..search.search_config import GlobalSearchConfig, calculate_backoff
+
 logger = logging.getLogger(__name__)
 
 class OpenAlexSearch(BaseSearch):
     def __init__(self, email: str):
         self.base_url = "https://api.openalex.org"
         self.email = email
-        self.semaphore = asyncio.Semaphore(10)
+        # concurrency from global config
+        self.semaphore = asyncio.Semaphore(GlobalSearchConfig.openalex_concurrency)
 
     def _validate_url(self, url: str) -> bool:
-        """Validate if the provided URL is a valid OpenAlex API URL."""
         parsed = urllib.parse.urlparse(url)
         if not (parsed.scheme and parsed.netloc):
             return False
@@ -33,13 +35,6 @@ class OpenAlexSearch(BaseSearch):
     async def search(self, url: str, limit: int = 30) -> List[Paper]:
         """
         Execute search against OpenAlex API using a full URL.
-        
-        Args:
-            url (str): Full OpenAlex API URL to fetch results from.
-            limit (int): Maximum number of papers to return and scrape.
-        
-        Returns:
-            List[Paper]: A list of Paper objects parsed from the results.
         """
         if not self._validate_url(url):
             logger.error(f"Invalid OpenAlex API URL: {url}")
@@ -47,62 +42,70 @@ class OpenAlexSearch(BaseSearch):
 
         logger.info("OpenAlex: Starting search")
         logger.debug(f"OpenAlex URL: {url}")
-        
+
+        max_attempts = GlobalSearchConfig.max_retries
         async with aiohttp.ClientSession() as session:
-            async with self.semaphore:
-                try:
-                    async with session.get(url) as response:
-                        response_text = await response.text()
-                        
-                        if response.status != 200:
-                            logger.error(f"OpenAlex error {response.status}: {response_text[:500]}")
-                            return []
-                            
-                        try:
-                            data = json.loads(response_text)
-                        except json.JSONDecodeError as e:
-                            logger.error(f"OpenAlex JSON parse error: {str(e)}")
-                            logger.debug(f"Response text: {response_text[:500]}")
-                            return []
-                        
-                        total_results = data.get("meta", {}).get("count", 0)
-                        if total_results == 0:
-                            logger.info("OpenAlex: No results found")
-                            logger.debug(f"Empty response for URL: {url}")
-                            return []
-                            
-                        results = data.get("results", [])
-                        logger.info(f"OpenAlex: Found {total_results} matches, processing top {limit} results")
-                        
-                        # Sort results by relevance score before processing
-                        sorted_results = sorted(
-                            results,
-                            key=lambda x: x.get("relevance_score", 0) or 0,  # Handle None values
-                            reverse=True
-                        )
-                        
-                        # Only take top N results based on limit
-                        top_results = sorted_results[:limit]
-                        
-                        papers = await self._parse_results(top_results, session)
-                        logger.info(f"OpenAlex: Successfully processed {len(papers)} papers")
-                        
-                        return papers
-                        
-                except Exception as e:
-                    logger.error(f"OpenAlex search failed: {str(e)}")
-                    logger.debug(f"Failed URL: {url}")
-                    return []
+            for attempt in range(max_attempts):
+                async with self.semaphore:
+                    try:
+                        if attempt > 0:
+                            backoff_time = calculate_backoff(attempt - 1)
+                            logger.warning(f"OpenAlex: Retrying fetch, backoff={backoff_time:.1f}s attempt={attempt}")
+                            await asyncio.sleep(backoff_time)
+
+                        async with session.get(url) as response:
+                            response_text = await response.text()
+
+                            if response.status != 200:
+                                logger.error(f"OpenAlex error {response.status}: {response_text[:500]}")
+                                if 500 <= response.status < 600 and attempt < max_attempts - 1:
+                                    continue
+                                return []
+
+                            try:
+                                data = json.loads(response_text)
+                            except json.JSONDecodeError as e:
+                                logger.error(f"OpenAlex JSON parse error: {str(e)}")
+                                if attempt < max_attempts - 1:
+                                    continue
+                                return []
+
+                            total_results = data.get("meta", {}).get("count", 0)
+                            if total_results == 0:
+                                logger.info("OpenAlex: No results found")
+                                logger.debug(f"Empty response for URL: {url}")
+                                return []
+
+                            results = data.get("results", [])
+                            logger.info(f"OpenAlex: Found {total_results} matches, processing top {limit} results")
+
+                            sorted_results = sorted(
+                                results,
+                                key=lambda x: x.get("relevance_score", 0) or 0,
+                                reverse=True
+                            )
+                            top_results = sorted_results[:limit]
+
+                            papers = await self._parse_results(top_results, session)
+                            logger.info(f"OpenAlex: Successfully processed {len(papers)} papers")
+                            return papers
+
+                    except Exception as e:
+                        logger.error(f"OpenAlex search failed: {str(e)}")
+                        if attempt < max_attempts - 1:
+                            backoff_time = calculate_backoff(attempt)
+                            await asyncio.sleep(backoff_time)
+                            continue
+                        return []
+            return []
 
     async def _parse_results(self, results: List[dict], session: aiohttp.ClientSession) -> List[Paper]:
-        """Parse OpenAlex results with improved validation."""
         papers = []
         scraper = UnifiedWebScraper(session)
         
         try:
             for result in results:
                 try:
-                    # Basic validation
                     title = result.get("title", "")
                     if not title or not isinstance(title, str):
                         continue
@@ -110,7 +113,6 @@ class OpenAlexSearch(BaseSearch):
                     if not title:
                         continue
 
-                    # Get nested source info safely
                     primary_location = result.get("primary_location", {})
                     source_info = primary_location.get("source")
                     if source_info and isinstance(source_info, dict):
@@ -118,7 +120,6 @@ class OpenAlexSearch(BaseSearch):
                     else:
                         source_name = ""
 
-                    # Extract DOI without https://doi.org/ prefix
                     doi = result.get("doi") or ""
                     if isinstance(doi, str):
                         if doi.startswith("https://doi.org/"):
@@ -129,7 +130,6 @@ class OpenAlexSearch(BaseSearch):
                     else:
                         doi = ""
 
-                    # Extract authors safely
                     authorships = result.get("authorships", [])
                     authors = []
                     for auth in authorships:
@@ -142,7 +142,6 @@ class OpenAlexSearch(BaseSearch):
                     if not authors:
                         authors = ["Unknown Author"]
 
-                    # Create paper object with all available metadata
                     paper = Paper(
                         doi=doi,
                         title=title,
@@ -165,7 +164,6 @@ class OpenAlexSearch(BaseSearch):
                         }
                     )
 
-                    # Get full text if available
                     try:
                         if paper.doi:
                             paper.full_text = await scraper.scrape(f"https://doi.org/{paper.doi}")
@@ -173,7 +171,7 @@ class OpenAlexSearch(BaseSearch):
                             paper.full_text = await scraper.scrape(paper.pdf_link)
                     except Exception as e:
                         logger.debug(f"Failed to get full text for {paper.title}: {str(e)}")
-                        paper.full_text = None  # Ensure it's set to None on failure
+                        paper.full_text = None
 
                     papers.append(paper)
                     logger.debug(f"Processed paper: {paper.title}")
@@ -190,99 +188,3 @@ class OpenAlexSearch(BaseSearch):
             
         finally:
             await scraper.close()
-
-if __name__ == "__main__":
-    # Configure logging
-    log_dir = "logs/openalex"
-    os.makedirs(log_dir, exist_ok=True)
-    
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler(f"{log_dir}/test_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"),
-            logging.StreamHandler()
-        ]
-    )
-
-    async def run_test():
-        # Test queries with different limits to verify limit enforcement
-        test_cases = [
-            {
-                "url": "https://api.openalex.org/works?search=%22precision+irrigation%22+%2B%22soil+moisture+sensors%22&sort=relevance_score:desc&per-page=30",
-                "limit": 2,
-                "description": "Testing small limit (2 papers)"
-            },
-            {
-                "url": "https://api.openalex.org/works?search=%22machine+learning%22+%2B%22irrigation+management%22&sort=relevance_score:desc&per-page=30",
-                "limit": 5,
-                "description": "Testing medium limit (5 papers)"
-            },
-            {
-                "url": "https://api.openalex.org/works?search=%22IoT+sensors%22+%2B%22irrigation%22&sort=relevance_score:desc&per-page=30",
-                "limit": 1,
-                "description": "Testing minimum limit (1 paper)"
-            }
-        ]
-
-        try:
-            email = "bryan.anye.5@gmail.com"
-            if not email:
-                logger.error("Email not provided")
-                return
-
-            searcher = OpenAlexSearch(email=email)
-            
-            for i, test_case in enumerate(test_cases, 1):
-                logger.info(f"\n{'='*50}")
-                logger.info(f"Test Case {i}/{len(test_cases)}: {test_case['description']}")
-                logger.info(f"Requested limit: {test_case['limit']}")
-                logger.info(f"Query URL: {test_case['url']}")
-                
-                try:
-                    start_time = time.time()
-                    results = await searcher.search(test_case['url'], limit=test_case['limit'])
-                    elapsed_time = time.time() - start_time
-                    
-                    logger.info(f"\nResults Summary:")
-                    logger.info(f"Retrieved {len(results)} papers (limit was {test_case['limit']})")
-                    logger.info(f"Processing time: {elapsed_time:.2f} seconds")
-                    
-                    if len(results) > test_case['limit']:
-                        logger.error(f"LIMIT VIOLATION: Got {len(results)} results, expected <= {test_case['limit']}")
-                    
-                    # Log paper details
-                    for j, paper in enumerate(results, 1):
-                        logger.info(f"\nPaper {j}:")
-                        logger.info(f"Title: {paper.title}")
-                        logger.info(f"Authors: {', '.join(paper.authors)}")
-                        logger.info(f"Year: {paper.year}")
-                        logger.info(f"DOI: {paper.doi}")
-                        logger.info(f"Abstract length: {len(paper.abstract)} chars")
-                        logger.info(f"Full text length: {len(paper.full_text) if paper.full_text else 0} chars")
-                        logger.info(f"Citation count: {paper.citation_count}")
-                        
-                        # Verify we have either abstract or full text
-                        if not paper.abstract and not paper.full_text:
-                            logger.warning(f"Paper {j} has no content (neither abstract nor full text)")
-                        
-                        logger.info("Metadata:")
-                        for key, value in paper.metadata.items():
-                            logger.info(f"  {key}: {value}")
-                    
-                except Exception as e:
-                    logger.error(f"Error processing test case {i}: {str(e)}", exc_info=True)
-                    continue
-                
-                logger.info(f"\nCompleted test case {i}")
-                await asyncio.sleep(2)  # Rate limiting between tests
-                
-        except Exception as e:
-            logger.error(f"Test execution failed: {str(e)}", exc_info=True)
-
-    # Add time tracking
-    import time
-    start_time = time.time()
-    asyncio.run(run_test())
-    total_time = time.time() - start_time
-    logger.info(f"\nTotal test execution time: {total_time:.2f} seconds")

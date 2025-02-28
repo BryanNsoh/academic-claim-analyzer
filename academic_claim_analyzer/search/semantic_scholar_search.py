@@ -1,4 +1,5 @@
-# semantic_scholar_search.py
+# academic_claim_analyzer/search/semantic_scholar_search.py
+
 import os
 import logging
 import asyncio
@@ -9,64 +10,37 @@ import fitz  # PyMuPDF for PDF parsing
 
 from .base import BaseSearch
 from ..models import Paper
+from ..search.search_config import GlobalSearchConfig, calculate_backoff
 
 
 class SemanticScholarSearch(BaseSearch):
     """
     A search module integrating with the Semantic Scholar API.
-
-    Rate limits per the official info (simplified):
-      - Unauthenticated usage (no API key):
-          * All anonymous users share a global pool ~5000 requests / 5 minutes (16.7 req/sec total).
-          * We can't know how many anonymous users are there, so let's do ~1 request every 2s
-            plus exponential backoff if we see 429. This is more conservative than 16.7 req/sec
-            and reduces collisions.
-      - Authenticated usage (with an API key):
-          * /paper/search endpoint allows ~1 request/second per key.
-          * We'll do 1 request every 1s plus exponential backoff on 429.
-
-    We do:
-      1. For each search page, we respect the basic delay between requests (1 or 2s).
-      2. If we get 429, we retry up to 5 times with exponential backoff (2, 4, 8, 16, 32s).
-      3. Once results are fetched, we concurrently download PDF files (no concurrency limit).
-         Because PDF fetches are not restricted as heavily by the search endpoint's strict 1 rps.
-      4. Return partial results if we exhaust retries or fail mid-search.
     """
 
     SEMANTIC_SCHOLAR_SEARCH_URL = "https://api.semanticscholar.org/graph/v1/paper/search"
 
     def __init__(self):
-        """
-        Constructor. We optionally read an API key from the environment variable
-        'SEMANTIC_SCHOLAR_KEY' to use authenticated searches if available.
-        """
         self.api_key = os.environ.get("SEMANTIC_SCHOLAR_KEY", None)
+        # concurrency from global config
+        self.semaphore = asyncio.Semaphore(GlobalSearchConfig.semanticscholar_concurrency)
 
     async def search(self, query: str, limit: int) -> List[Paper]:
         """
         Perform a Semantic Scholar search for 'query', returning up to 'limit' results.
-
-        Each Paper includes:
-          - title, authors, year, doi, abstract, pdf_link, full_text (if PDF parse works),
-            and metadata (e.g., citationCount, s2_paper_id).
-
         We'll fetch in pages of up to 100, halting at offset=1000 or after 'limit' is reached.
-        Then we'll fetch PDFs (where available) concurrently with no explicit concurrency limit.
+        Then we'll fetch PDFs (where available) concurrently.
         """
         all_papers: List[Paper] = []
         offset = 0
 
         # Decide normal delay between successive search requests
-        if self.api_key:
-            delay_between_requests = 1.0  # 1 request/sec if authenticated
-        else:
-            delay_between_requests = 2.0  # 1 request every 2s if unauthenticated
+        delay_between_requests = 1.0 if self.api_key else 2.0
 
         while len(all_papers) < limit and offset < 1000:
             to_fetch = min(100, limit - len(all_papers))
             data = await self._fetch_search_page(query, offset, to_fetch)
             if not data:
-                # If we got None or an empty result, stop
                 break
 
             papers_json = data.get("data", [])
@@ -82,13 +56,11 @@ class SemanticScholarSearch(BaseSearch):
                 break
 
             if offset >= 1000:
-                # The /paper/search endpoint doesn't go beyond offset=1000
                 break
 
-            # Basic pacing to avoid immediate 429
             await asyncio.sleep(delay_between_requests)
 
-        # Download/parse PDFs in parallel (unbounded concurrency)
+        # fetch PDFs in parallel
         tasks = []
         for p in all_papers:
             if p.pdf_link:
@@ -100,9 +72,8 @@ class SemanticScholarSearch(BaseSearch):
 
     async def _fetch_search_page(self, query: str, offset: int, limit: int) -> Optional[dict]:
         """
-        Fetches one page of results from the Semantic Scholar search API, with up to 5 retries
-        on 429 or exceptions (exponential backoff).
-        Returns the parsed JSON, or None if it fails after 5 attempts.
+        Fetch one page of results from the Semantic Scholar search API,
+        with up to max_retries on 429 or exceptions (exponential backoff).
         """
         params = {
             "query": query,
@@ -114,62 +85,56 @@ class SemanticScholarSearch(BaseSearch):
         if self.api_key:
             headers["x-api-key"] = self.api_key
 
-        max_retries = 5
+        max_attempts = GlobalSearchConfig.max_retries
         backoff_seconds = 2.0
 
-        for attempt in range(1, max_retries + 1):
+        for attempt in range(max_attempts):
             async with aiohttp.ClientSession() as session:
-                try:
-                    async with session.get(
-                        self.SEMANTIC_SCHOLAR_SEARCH_URL,
-                        params=params,
-                        headers=headers,
-                        timeout=30
-                    ) as resp:
-                        if resp.status == 200:
-                            return await resp.json()
-                        elif resp.status == 429:
-                            # Rate-limit encountered
-                            if attempt < max_retries:
-                                logging.warning(
-                                    f"429 from Semantic Scholar. Attempt {attempt}/{max_retries}."
-                                    f" Sleeping {backoff_seconds}s before retry..."
-                                )
-                                await asyncio.sleep(backoff_seconds)
-                                backoff_seconds *= 2
-                                continue
-                            else:
-                                logging.warning("429 on final retry; giving up.")
-                                return None
-                        elif resp.status in (401, 403):
-                            logging.warning(f"Unauthorized/Forbidden ({resp.status}).")
-                            return None
-                        else:
-                            text = await resp.text()
-                            logging.warning(
-                                f"Unexpected status {resp.status} from Semantic Scholar. Body: {text}"
-                            )
-                            return None
-                except Exception as ex:
-                    logging.error(
-                        f"Exception on attempt {attempt}/{max_retries} for offset {offset}: {ex}"
-                    )
-                    if attempt < max_retries:
-                        logging.warning(
-                            f"Retrying in {backoff_seconds}s (exponential backoff)."
-                        )
-                        await asyncio.sleep(backoff_seconds)
-                        backoff_seconds *= 2
-                        continue
-                    else:
-                        return None
+                async with self.semaphore:
+                    try:
+                        if attempt > 0:
+                            # exponential backoff
+                            backoff_time = calculate_backoff(attempt - 1)
+                            logging.warning(f"SemanticScholar: Retry fetch page offset={offset}, backoff={backoff_time:.1f}s attempt={attempt}")
+                            await asyncio.sleep(backoff_time)
 
+                        async with session.get(
+                            self.SEMANTIC_SCHOLAR_SEARCH_URL,
+                            params=params,
+                            headers=headers,
+                            timeout=30
+                        ) as resp:
+                            if resp.status == 200:
+                                return await resp.json()
+                            elif resp.status == 429:
+                                if attempt < max_attempts - 1:
+                                    logging.warning(
+                                        f"429 from Semantic Scholar. attempt {attempt}/{max_attempts}."
+                                    )
+                                    continue
+                                else:
+                                    logging.warning("429 on final retry; giving up.")
+                                    return None
+                            elif resp.status in (401, 403):
+                                logging.warning(f"Unauthorized/Forbidden ({resp.status}).")
+                                return None
+                            else:
+                                text = await resp.text()
+                                logging.warning(
+                                    f"Unexpected status {resp.status} from Semantic Scholar. Body: {text}"
+                                )
+                                return None
+                    except Exception as ex:
+                        logging.error(
+                            f"Exception on attempt {attempt}/{max_attempts} for offset {offset}: {ex}"
+                        )
+                        if attempt < max_attempts - 1:
+                            continue
+                        else:
+                            return None
         return None
 
     def _json_to_papers(self, papers_json: List[dict]) -> List[Paper]:
-        """
-        Converts a list of JSON records from Semantic Scholar into Paper objects.
-        """
         results: List[Paper] = []
         for item in papers_json:
             title = item.get("title", "")
@@ -195,7 +160,7 @@ class SemanticScholarSearch(BaseSearch):
 
             paper_obj = Paper(
                 title=title,
-                authors=authors,
+                authors=authors if authors else ["Unknown Author"],
                 year=year,
                 doi=doi,
                 abstract=abstract,
@@ -207,29 +172,37 @@ class SemanticScholarSearch(BaseSearch):
 
     async def _fetch_and_parse_pdf(self, paper: Paper) -> None:
         """
-        Fetch and parse the PDF for the given paper. We'll do this concurrently
-        without bounding concurrency in the code (i.e., no semaphore).
-        If the fetch or parse fails, we log a warning and leave full_text as None.
+        Download and parse the PDF for the given paper concurrently.
+        Up to max_retries with exponential backoff if fails.
         """
-        async with aiohttp.ClientSession() as session:
-            try:
-                async with session.get(paper.pdf_link, timeout=60) as resp:
-                    if resp.status == 200:
-                        pdf_bytes = await resp.read()
-                        try:
-                            with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
-                                extracted_texts = [page.get_text() for page in doc]
-                            paper.full_text = "\n".join(extracted_texts)
-                        except Exception as parse_err:
+        max_attempts = GlobalSearchConfig.max_retries
+        for attempt in range(max_attempts):
+            async with aiohttp.ClientSession() as session:
+                try:
+                    async with session.get(paper.pdf_link, timeout=60) as resp:
+                        if resp.status == 200:
+                            pdf_bytes = await resp.read()
+                            try:
+                                with fitz.open(stream=pdf_bytes, filetype="pdf") as doc:
+                                    extracted_texts = [page.get_text() for page in doc]
+                                paper.full_text = "\n".join(extracted_texts)
+                            except Exception as parse_err:
+                                logging.warning(
+                                    f"Failed to parse PDF for '{paper.title}': {parse_err}"
+                                )
+                            return
+                        else:
                             logging.warning(
-                                f"Failed to parse PDF for '{paper.title}': {parse_err}"
+                                f"PDF download failed (status {resp.status}) for '{paper.title}'. "
                             )
-                    else:
-                        logging.warning(
-                            f"PDF download failed (status {resp.status}) for '{paper.title}'. "
-                            "Keeping only the abstract."
-                        )
-            except Exception as e:
-                logging.warning(
-                    f"Exception fetching PDF for '{paper.title}' from '{paper.pdf_link}': {e}"
-                )
+                            return
+                except Exception as e:
+                    logging.warning(
+                        f"Exception fetching PDF for '{paper.title}' from '{paper.pdf_link}': {e}"
+                    )
+                    if attempt < max_attempts - 1:
+                        backoff_time = calculate_backoff(attempt)
+                        logging.warning(f"SemanticScholar PDF: backoff={backoff_time:.1f}s attempt={attempt}")
+                        await asyncio.sleep(backoff_time)
+                        continue
+                    return

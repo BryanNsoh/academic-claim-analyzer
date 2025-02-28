@@ -1,6 +1,8 @@
+# academic_claim_analyzer/search/core_search.py
+
 import aiohttp
 import os
-import random  # <-- NEW
+import random
 from typing import List, Optional, Dict, Any
 from datetime import datetime
 from dotenv import load_dotenv
@@ -12,6 +14,8 @@ import json
 import asyncio
 import time
 
+from ..search.search_config import GlobalSearchConfig, calculate_backoff
+
 logger = logging.getLogger(__name__)
 
 load_dotenv(override=True)
@@ -22,18 +26,17 @@ class CORESearch(BaseSearch):
         if not self.api_key:
             raise ValueError("CORE_API_KEY not found in environment variables")
         self.base_url = "https://api.core.ac.uk/v3"
-        self.semaphore = asyncio.Semaphore(2)  # concurrency of 2, as before
+        # concurrency from global config
+        self.semaphore = asyncio.Semaphore(GlobalSearchConfig.core_concurrency)
 
     async def search(self, query: str, limit: int) -> List[Paper]:
-        """Execute search against CORE API with exponential backoff retry on 500 errors or JSON parse failures."""
+        """Execute search against CORE API with exponential backoff on 500 or JSON parse failures."""
         logger.info(f"CORE: Starting search with limit {limit}")
 
         headers = {
             "Authorization": f"Bearer {self.api_key}",
             "Accept": "application/json",
         }
-
-        # Over-fetch so we can filter/sort
         params = {
             "q": query,
             "limit": limit * 2,
@@ -43,13 +46,12 @@ class CORESearch(BaseSearch):
 
         logger.debug(f"CORE API request parameters: {json.dumps(params, indent=2)}")
 
-        # We'll attempt up to 5 times if the API returns 500 or invalid JSON
-        max_attempts = 5
+        max_attempts = GlobalSearchConfig.max_retries
 
         async with aiohttp.ClientSession() as session:
             for attempt in range(max_attempts):
-                try:
-                    async with self.semaphore:
+                async with self.semaphore:
+                    try:
                         async with session.post(
                             f"{self.base_url}/search/works",
                             headers=headers,
@@ -59,12 +61,16 @@ class CORESearch(BaseSearch):
                             logger.debug(f"CORE API raw response (attempt {attempt+1}): {resp_text[:500]}")
 
                             if response.status == 200:
-                                # Parse JSON
                                 try:
                                     data = json.loads(resp_text)
                                 except json.JSONDecodeError as e:
                                     logger.error(f"Failed to parse CORE API response: {str(e)}")
-                                    raise RuntimeError("JSON parse error")  # triggers retry
+                                    if attempt < max_attempts - 1:
+                                        backoff = calculate_backoff(attempt)
+                                        logger.warning(f"CORE: JSON parse error. backoff={backoff:.1f}s attempt={attempt}")
+                                        await asyncio.sleep(backoff)
+                                        continue
+                                    return []
 
                                 total_results = data.get("totalHits", 0)
                                 logger.info(f"CORE: Found {total_results} total matches")
@@ -73,34 +79,29 @@ class CORESearch(BaseSearch):
                                     logger.info("CORE: No results found for query")
                                     return []
 
-                                # success: parse them
                                 results = await self._parse_results(data, session, limit)
                                 logger.info(f"CORE: Successfully retrieved {len(results)} valid papers")
                                 return results
 
                             else:
-                                # 4xx or 5xx
                                 logger.error(f"CORE: API error {response.status}")
                                 logger.error(f"CORE: Response: {resp_text[:500]}")
-
-                                # We'll only retry on 500.
-                                if response.status == 500:
-                                    raise RuntimeError(f"CORE 500 error on attempt {attempt+1}")
+                                # Retry if 5xx
+                                if 500 <= response.status < 600 and attempt < max_attempts - 1:
+                                    backoff = calculate_backoff(attempt)
+                                    logger.warning(f"CORE: 5xx error. backoff={backoff:.1f}s attempt={attempt}")
+                                    await asyncio.sleep(backoff)
+                                    continue
                                 else:
-                                    # e.g. 404, 401, 429 => return empty and do not retry
                                     return []
-
-                except Exception as e:
-                    # If we fail with 500 or parse error, do an exponential backoff
-                    if attempt < max_attempts - 1:
-                        backoff = (2 ** attempt) + random.random()  # e.g. 1,2,4,... plus up to 1s jitter
-                        logger.warning(f"CORE: Attempt {attempt+1} failed ({e}). Retrying in {backoff:.1f}s...")
-                        await asyncio.sleep(backoff)
-                    else:
-                        logger.error(f"CORE: All retries failed - {str(e)}")
+                    except Exception as e:
+                        logger.error(f"CORE: Unexpected error - {str(e)}")
+                        if attempt < max_attempts - 1:
+                            backoff = calculate_backoff(attempt)
+                            logger.warning(f"CORE: Exception, backoff={backoff:.1f}s attempt={attempt}")
+                            await asyncio.sleep(backoff)
+                            continue
                         return []
-
-            # In theory we never reach here since we return in the loop
             return []
 
     def _extract_string_value(self, data: Any) -> str:
@@ -114,7 +115,6 @@ class CORESearch(BaseSearch):
         return ""
 
     def _safe_extract_authors(self, entry: Dict[str, Any]) -> List[str]:
-        """Extract author names with improved validation."""
         authors = []
         author_data = entry.get('authors', [])
         
@@ -136,7 +136,6 @@ class CORESearch(BaseSearch):
         return authors or ["Unknown Author"]
 
     def _safe_extract_year(self, entry: Dict[str, Any]) -> int:
-        """Extract publication year with improved validation."""
         try:
             for field in ['yearPublished', 'publishedDate', 'createdDate']:
                 value = entry.get(field)
@@ -152,7 +151,6 @@ class CORESearch(BaseSearch):
             return -1
 
     async def _parse_results(self, data: Dict[str, Any], session: aiohttp.ClientSession, limit: int) -> List[Paper]:
-        """Parse CORE API response with improved validation and metrics."""
         results = []
         valid_count = 0
         invalid_count = 0
@@ -162,12 +160,11 @@ class CORESearch(BaseSearch):
             entries = data.get('results', [])
             logger.info(f"CORE: Processing {len(entries)} results")
 
-            # Sort entries by citation count if available
             sorted_entries = sorted(
                 entries,
                 key=lambda x: int(x.get('citationCount', 0) or 0),
                 reverse=True
-            )[:limit]  # Only process top N entries
+            )[:limit]
 
             for entry in sorted_entries:
                 try:
@@ -203,7 +200,6 @@ class CORESearch(BaseSearch):
                         }
                     )
 
-                    # Only get full text for the ones we keep
                     try:
                         if paper.doi:
                             paper.full_text = await scraper.scrape(f"https://doi.org/{paper.doi}")
@@ -213,7 +209,6 @@ class CORESearch(BaseSearch):
                         logger.debug(f"Failed to get full text for {paper.title}: {str(e)}")
                         paper.full_text = None
 
-                    # Must have an abstract or full text
                     if paper.abstract or paper.full_text:
                         results.append(paper)
                         valid_count += 1
@@ -236,30 +231,3 @@ class CORESearch(BaseSearch):
             return []
         finally:
             await scraper.close()
-
-
-if __name__ == "__main__":
-    # Minimal test code
-    import os
-    import logging
-    from datetime import datetime
-    import asyncio
-
-    log_dir = "logs/core"
-    os.makedirs(log_dir, exist_ok=True)
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        handlers=[
-            logging.FileHandler(f"{log_dir}/test_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"),
-            logging.StreamHandler()
-        ]
-    )
-
-    async def run_test():
-        test_query = 'title:("precision agriculture")'
-        searcher = CORESearch()
-        results = await searcher.search(test_query, limit=2)
-        print(f"Got {len(results)} results.")
-
-    asyncio.run(run_test())

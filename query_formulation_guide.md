@@ -12,23 +12,23 @@ Therefore, **every single element** of your YAML query and ranking guidance must
 
 When writing your YAML file for academic searches, you have two critical pieces:
 
-1. **Queries** (which define what to search for)
+1. **Queries** (which define what to search for)  
 2. **Ranking guidance** (which decides how to prioritize or exclude the returned papers)
 
 The search engine and ranking logic will **not** magically infer your deeper intentions. You must *scream* your domain constraints and must-have criteria. Otherwise, it is doomed to return or top-rank irrelevant papers.
 
 ### 2.1 **What You MUST Do**
 
-- **Emphatically specify** the exact application domain in your ranking guidance (e.g., “IoT for precision irrigation in agriculture” or “fuzzy logic specifically for irrigation scheduling”).  
-- **List mandatory criteria** that define “relevant” (e.g., must have real field data, must mention water savings).  
-- **Give explicit conditions** for how to handle borderline cases (simulation, partial domain).  
+- **Emphatically specify** the exact application domain in your ranking guidance (e.g., “IoT for precision irrigation in agriculture,” “multi-omics for disease biomarkers,” “fuzzy logic specifically for irrigation scheduling,” etc.).  
+- **List mandatory criteria** that define “relevant” (e.g., must have real field data, must mention water savings, must detail membership functions, must mention a certain type of multi-omics pipeline).  
+- **Give explicit conditions** for how to handle borderline cases (simulation only vs. real pilot, partial domain, etc.).  
 - **Forbid** all off-domain usage. If it’s not about your specified application, it must drop to the bottom or be excluded entirely.
 
 ### 2.2 **What You MUST NOT Do**
 
-- **Never** rely on the queries alone to carry domain context. The ranking logic sees only the `ranking_guidance` and the paper text.  
-- **Never** be vague with statements like “prefer empirical studies.” Instead say “paper must explicitly mention real or pilot-scale deployment with measured water metrics.”  
-- **Never** allow guesswork. If you want fuzzy logic in irrigation, say, “Any fuzzy logic not used for irrigation scheduling is irrelevant—rank bottom.”
+- **Never** rely on the queries alone to carry domain context. The ranking logic sees only the `ranking_guidance` and the paper text—**not** your original mental context.  
+- **Never** be vague with statements like “prefer empirical studies.” Instead say “papers must explicitly mention real or pilot-scale deployment with measured water metrics,” or “papers must have validated multi-omics pipeline for disease classification with real patient data.”  
+- **Never** allow guesswork. If you want fuzzy logic in irrigation, say: “If the paper does not mention fuzzy logic explicitly for agricultural irrigation scheduling, it is irrelevant—rank bottom.”
 
 ---
 
@@ -40,13 +40,12 @@ Every well-structured request has **five** main components:
    - A unique identifier, e.g., `- id: fuzzy_logic_irrigation_scheduling`.  
 2. **Queries**  
    - An array of 5–10 (or more) queries that each contains domain-specific text.  
-   - Example: “Fuzzy logic for agricultural irrigation scheduling with real data,” “Comparison of fuzzy irrigation control vs. threshold-based.”  
 3. **Ranking guidance**  
    - A multi-line string specifying the **exact** domain constraints, top priorities, penalties, and irrelevances.  
 4. **Exclusion criteria** (optional but strongly recommended)  
    - Boolean flags that automatically exclude or heavily penalize any paper not meeting your domain.  
 5. **Information extraction**  
-   - (Optional) Defines fields you want pulled from relevant papers, e.g. “water_savings,” “fuzzy_inference_method,” “scale_of_experiment,” etc.
+   - (Optional) Defines fields you want pulled from relevant papers, e.g. “water_savings,” “fuzzy_inference_method,” “multi_omics_pipeline,” “differential_expression_method,” etc.
 
 Below is the typical YAML structure to keep in mind:
 
@@ -63,7 +62,7 @@ requests:
     queries:
       - "First very explicit query"
       - "Second very explicit query"
-      # ...
+      ...
     ranking_guidance: >
       <massively explicit domain constraints, desired metrics, do/don't, etc.>
     exclusion_criteria:
@@ -80,17 +79,16 @@ requests:
 
 ### 4.1 **Queries: Powerful & Domain-Specific**
 
-- **Add your entire domain context**: If you want fuzzy logic for irrigation scheduling, your query text should *explicitly* contain “fuzzy logic,” “irrigation scheduling,” and “agriculture.”  
-- Use synonyms or near-synonyms if needed.  
-- Example:  
+- **Add your entire domain context**: If you want “fuzzy logic for irrigation scheduling,” explicitly mention “fuzzy logic,” “irrigation scheduling,” “agriculture,” and any key performance metrics or required details.  
+- Use synonyms or near-synonyms if needed: e.g., “fuzzy inference system,” “Mamdani approach for farm water scheduling,” “Sugeno fuzzy in farmland.”  
+- Example:
   ```yaml
   queries:
     - "Fuzzy logic specifically for agricultural irrigation scheduling with real pilot-scale data"
     - "Mamdani or Sugeno fuzzy inference for water management in agriculture"
     - "Comparison of fuzzy-based irrigation to threshold triggers with measured water savings"
-    ...
   ```
-- If you merely say “fuzzy logic for water systems,” you risk returning random fuzzy logic in municipal water distribution or fishery tank controls. So **be ultra-specific**.
+- If you just say “fuzzy logic for agriculture,” you risk returning fuzzy logic for fertilizer, fuzzy logic for pest control, fuzzy logic for greenhouse climate, etc.—**not** irrigation scheduling specifically.
 
 ### 4.2 **Ranking Guidance: Your Non-Negotiable Linchpin**
 
@@ -98,155 +96,182 @@ During the ranking step, the system only sees:
 1. The text of each retrieved paper  
 2. The `ranking_guidance` you wrote  
 
-**Hence** the ranking guidance must restate every crucial requirement—**including** the exact domain. Below are **good vs. bad** examples.
+**Hence** the ranking guidance must restate every crucial requirement—**including** the exact domain. The next section shows some powerful examples.
 
-#### 🔴 **Bad Ranking Guidance (Vague)**
+---
+
+## 5. **Concrete, Detailed Ranking Guidance Examples**
+
+### 5.1 **Example #1: Fuzzy Logic for Irrigation Scheduling in Agriculture**
+
+This is the example from your prompt. **Keep it exactly**:
 
 ```yaml
 ranking_guidance: >
-  1. Must describe fuzzy inference methods.
-  2. Prefer real experiments.
-  3. High rank if comparing fuzzy logic to other methods.
-```
-- This says nothing about **agricultural irrigation**. The system might rank a “fuzzy inference for automobile braking system” paper highly because it meets #1, #2, and #3.
+  1. This request is ONLY about “fuzzy logic methods for irrigation scheduling
+     in agriculture.” If a paper does not explicitly confirm it applies fuzzy logic 
+     (in any variant: Mamdani, Sugeno, etc.) to agricultural irrigation or 
+     water management, it must be deprioritized or effectively filtered out.
 
-#### 🟢 **Excellent Ranking Guidance (Concrete & Forceful)**
+  2. The topmost rank goes to papers that demonstrate fuzzy irrigation scheduling 
+     in real-world or pilot-scale agricultural settings with actual crops, 
+     water stress metrics, or field data. Among these:
+       - The more comprehensive the discussion of membership functions, 
+         rulesets, crop stress factors, and success metrics (like water savings, yield, 
+         or stress reduction), the better.
+       - If a study only simulates or uses a purely laboratory hydroponic approach 
+         without a real crop or real farmland environment, it is still valid 
+         if it explicitly states "irrigation scheduling" in the context of agriculture, 
+         but it ranks lower than full field or greenhouse trials.
+
+  3. Next in priority are those that compare fuzzy-based irrigation to 
+     other scheduling methods (like threshold triggers, PID, or standard 
+     ET-based approaches). The presence of a performance comparison with 
+     numeric results or at least robust methodology for measuring 
+     irrigation outcomes is a plus.
+
+  4. If a paper uses fuzzy logic for general agriculture tasks but NOT 
+     specifically for irrigation scheduling (e.g., fuzzy logic for fertilizer 
+     control or pest management only), rank it significantly lower 
+     (close to the bottom).
+
+  5. If a paper claims “fuzzy irrigation” but does not detail the rule-base 
+     or membership functions, or does not present any real or simulated 
+     performance metrics, it should rank lower than those with clear 
+     methodological detail. Real empirical validation (even partial) 
+     outranks purely conceptual or heuristic approaches.
+
+  6. If the paper’s domain is not agriculture or not about irrigation 
+     (for example, fuzzy logic for auto-braking systems or fuzzy 
+     logic for medical diagnosis), that is completely irrelevant; 
+     it should end up at the bottom of the rankings or excluded entirely. 
+
+  7. Whenever multiple relevant studies exist, we prefer the most recent 
+     (2015–present) especially if they use modern hardware or data-logging, 
+     or mention IoT-based sensors. But older pioneering papers that 
+     still strongly match “fuzzy logic in irrigation scheduling” can 
+     rank high if they are seminal references with data.
+
+  8. Any mention of “water-saving results” or “crop yield improvements” 
+     plus fuzzy logic scheduling is a key bonus. 
+     The more robust the result, the higher the priority.
+```
+
+You see how it **absolutely** forbids confusion between irrigation scheduling and other fuzzy logic domains.
+
+---
+
+### 5.2 **Example #2: Multi-Omics for Disease Biomarkers (Bioinformatics)**
+
+Let’s present a **completely different** domain with extreme specificity. Suppose we only care about “multi-omics integration for disease biomarker discovery, requiring real human data.” We can write:
 
 ```yaml
 ranking_guidance: >
-  ABSOLUTE DOMAIN REQUIREMENT:
-    - Paper must explicitly describe fuzzy logic for agricultural irrigation scheduling
-      or water management in farmland/horticulture.
+  1. This request is ONLY about "multi-omics integration for disease biomarker discovery
+     in humans." If a paper does not explicitly confirm it applies multi-omics data 
+     (genomics, transcriptomics, proteomics, metabolomics, etc.) to identify or validate 
+     disease biomarkers in human subjects, it must be deprioritized or effectively filtered out.
 
-  TOP PRIORITY CRITERIA:
-    1. Fuzzy logic must be validated in real or pilot-scale field conditions measuring
-       water usage, yield, or crop stress metrics.
-    2. Must compare fuzzy scheduling with at least one conventional irrigation method
-       (threshold-based, timer-based, PID, or manual).
-    3. Must present explicit membership functions, rule sets, or defuzzification strategies.
+  2. The topmost rank goes to papers demonstrating integrative analysis of at least 
+     TWO distinct omics layers (e.g., genomics + proteomics) in actual human disease 
+     studies. Among these:
+       - The more comprehensive the omics coverage (like genomics, transcriptomics, epigenomics, 
+         proteomics, metabolomics) and the more robust the sample size, the higher the rank.
+       - If a study only uses publicly available cell-line data or purely in silico 
+         simulations without real human samples, it is still valid if it clearly states 
+         it's for disease biomarker discovery with multi-omics, but ranks lower than 
+         studies using actual patient data.
 
-  EXCLUSIONS OR PENALTIES:
-    - Any paper describing fuzzy logic in a domain other than agricultural irrigation
-      must rank at the bottom or be excluded entirely.
-    - If purely theoretical or simulation with no real data, rank lower than those
-      with actual field results.
-    - If no explicit mention of irrigation scheduling, also rank at bottom.
+  3. Next in priority are those that compare integrated multi-omics approaches to 
+     single-omics or traditional biomarkers. The presence of quantitative performance 
+     metrics (e.g., AUC, accuracy, or p-values for biomarker significance) is a plus.
+
+  4. If a paper uses multi-omics techniques for general systems biology research 
+     but NOT specifically for disease biomarker identification or validation, 
+     rank it significantly lower (close to the bottom).
+
+  5. If a paper claims “multi-omics biomarker discovery” but does not detail 
+     the omics layers or does not present any real or simulated 
+     performance metrics or significance tests, it should rank lower 
+     than those with clear methodological detail. Real empirical validation 
+     with patient cohorts outranks purely conceptual or heuristic approaches.
+
+  6. If the paper’s domain is not disease biomarkers in humans (for example, 
+     multi-omics for plant breeding or for microbial communities), 
+     that is completely irrelevant; it should end up at the bottom 
+     of the rankings or excluded entirely. 
+
+  7. Whenever multiple relevant studies exist, we prefer the most recent 
+     (2018–present), especially if they use advanced pipeline tools 
+     (like Nextflow, Snakemake) or mention integrated big data approaches. 
+     But older pioneering papers that still strongly match "multi-omics 
+     for disease biomarkers in humans" can rank high if they are seminal references.
+
+  8. Any mention of “clinically validated biomarkers” or “patient-derived multi-omics data” 
+     is a key bonus. The more robust the result (e.g., validated in multiple cohorts), 
+     the higher the priority.
 ```
-- **No** guesswork. If it’s not about fuzzy logic **for** irrigation scheduling, it’s out.
+
+Notice how we replicate the same style of **ultra-strict** domain constraints, but in a **completely different** field (bioinformatics / multi-omics). The principle is the same: absolutely forbid any confusion—**only** multi-omics for disease biomarker discovery with real human data is relevant.
 
 ---
 
-## 5. **Side-by-Side Example**
-
-Below is a **complete** example of a single request block, demonstrating the “explicitness” standard:
+### 5.3 **Example #3: Edge-Computing IoT for Real-Time River Flood Monitoring**  
+(Another random domain example of “extreme specificity”)
 
 ```yaml
-- id: fuzzy_logic_irrigation_scheduling
+ranking_guidance: >
+  1. This request is ONLY about "edge-computing-based IoT systems for real-time 
+     river flood monitoring or early warning." Any paper that does not explicitly 
+     confirm it focuses on IoT edge devices monitoring river water levels or 
+     flood prediction must be deprioritized or effectively filtered out.
 
-  queries:
-    - "Fuzzy logic specifically for agricultural irrigation scheduling with real field experiments"
-    - "Mamdani or Sugeno fuzzy inference for water management in row crops, including pilot-scale data"
-    - "Comparison of fuzzy-based irrigation scheduling vs. threshold triggers, measuring water savings"
-    - "Quantitative results from fuzzy irrigation controllers in horticulture or field crops"
-    - "Explicit membership function design for fuzzy irrigation control with yield or water metrics"
+  2. The topmost rank goes to papers demonstrating actual or pilot-scale river 
+     monitoring deployments, where edge devices measure water level, flow rate, 
+     or rainfall data. Among these:
+       - The more comprehensive the discussion of hardware constraints, power usage, 
+         data transmission, and real-time analysis, the better.
+       - If a study only simulates or uses purely hypothetical data 
+         without referencing real river or flood conditions, it is still valid 
+         if it explicitly states "river flood monitoring," but it ranks lower 
+         than full field trials.
 
-  ranking_guidance: >
-    CRITICAL REQUIREMENT (NO EXCEPTIONS):
-      - Papers must explicitly mention fuzzy logic methods for controlling or scheduling irrigation
-        in agriculture (field, greenhouse, orchard, horticulture). If it's fuzzy logic in any
-        unrelated domain, rank it near zero or exclude.
+  3. Next in priority are those that compare edge-computing IoT solutions to 
+     traditional centralized or offline monitoring approaches. The presence 
+     of performance metrics (latency, power usage, reliability under harsh 
+     conditions, etc.) is a plus.
 
-    TOP RANK FACTORS:
-      1. Real or pilot-scale demonstration with measurable results (water usage, yield, stress metrics).
-      2. Comparison to at least one standard irrigation method (threshold, timer, manual, etc.).
-      3. Clear description of fuzzy inference approach (Mamdani, Sugeno, membership functions,
-         defuzzification) specifically for irrigation.
+  4. If a paper uses IoT or edge computing for general environmental tasks (like 
+     air quality or forest fire) but NOT specifically for river flood monitoring, 
+     rank it significantly lower (close to the bottom).
 
-    PENALTIES/LOW RANK:
-      - Papers with only a conceptual or purely simulation approach (no real data) rank below
-        those with actual tested data.
-      - If fuzzy logic is used for some general purpose (like pest control or industrial process),
-        with no mention of irrigation scheduling, it belongs at the bottom.
+  5. If a paper claims “river flood IoT” but does not detail the edge-computing 
+     approach or does not present any real or simulated performance metrics, 
+     it should rank lower than those with clear methodological detail. Real 
+     empirical validation (even partial) outranks purely conceptual or heuristic approaches.
 
-  exclusion_criteria:
-    fuzzy_not_irrigation:
-      type: boolean
-      description: "Exclude if fuzzy logic is not explicitly about agricultural irrigation scheduling."
+  6. If the paper’s domain is not about rivers/flood management at all 
+     (for example, IoT for smart homes, city traffic, or farmland irrigation), 
+     that is completely irrelevant; it should end up at the bottom 
+     of the rankings or excluded entirely. 
 
-  information_extraction:
-    fuzzy_inference_type:
-      type: string
-      description: "Which fuzzy method was used: Mamdani, Sugeno, Tsukamoto?"
-    real_experiment_data:
-      type: boolean
-      description: "Whether the paper describes real or pilot-scale data"
-    comparative_approach:
-      type: boolean
-      description: "Does the paper compare fuzzy to threshold or other conventional methods?"
-    performance_metrics:
-      type: string
-      description: "Mentioned water savings, yield improvement, or other outcomes?"
+  7. Whenever multiple relevant studies exist, we prefer the most recent (2016–present) 
+     especially if they mention LoRa, NB-IoT, or edge ML. But older pioneering 
+     papers that still strongly match "edge-based IoT for flood monitoring" 
+     can rank high if they are seminal references with data.
+
+  8. Any mention of “water-level sensors,” “real-time flood alarms,” or “low-power 
+     edge devices” plus actual field deployment is a key bonus. The more robust the 
+     result, the higher the priority.
 ```
 
-Observe how:
-
-- **Queries** specifically mention “agricultural irrigation scheduling” and “real field experiments,” etc.  
-- **Ranking guidance** forbids “fuzzy logic in any other domain.”  
-- **Exclusion criteria** adds an explicit boolean for quick rejection.  
-- **Information extraction** clarifies which data to pull from top papers.
+Again, same structure: domain-limiting statement, top rank conditions, next priority, partial domain penalty, total irrelevance penalty, recency preference, and mention of bonus points.
 
 ---
 
-## 6. **Comparisons: Good vs. Bad Queries**
+## 6. **Side-by-Side Example of a Full YAML for Fuzzy Logic Irrigation**
 
-**Bad Query**: “IoT sensor networks in agriculture”  
-- Too broad. Might retrieve papers about IoT in general farm monitoring, not necessarily irrigation scheduling.
-
-**Better Query**: “IoT sensor networks specifically for real-time irrigation scheduling in crop fields with measured water savings”  
-- Mentions IoT, irrigation scheduling, “real-time,” “crop fields,” “measured water savings.” Minimizes ambiguity.
-
----
-
-## 7. **Exclusion Criteria**: The Quick Filter
-
-If you know certain traits instantly disqualify a paper, define a boolean in `exclusion_criteria`. For instance:
-
-```yaml
-exclusion_criteria:
-  not_irrigation:
-    type: boolean
-    description: "Paper does not address irrigation scheduling in agriculture at all."
-  no_real_data:
-    type: boolean
-    description: "Paper is purely theoretical, no real or pilot-scale data."
-```
-
-Now the system can ask: “Does the paper fail the `not_irrigation` check? If yes, exclude it.” This ensures worthless papers never get near the top.
-
----
-
-## 8. **Information Extraction**: Gleaning Key Data Points
-
-If you want specific fields from the top papers (like “accuracy,” “water_savings,” or “cost_analysis”), define them under `information_extraction`. For instance:
-
-```yaml
-information_extraction:
-  water_savings:
-    type: float
-    description: "Percentage of water savings reported in the study"
-  yield_improvement:
-    type: float
-    description: "Percentage yield increase or improvement, if any"
-  approach_details:
-    type: string
-    description: "Specific mention of how the approach is implemented"
-```
-
----
-
-## 9. **Putting It All Together: A “Full” Example**
-
-Below is a more comprehensive snippet, combining global config plus a single request. (In actual usage, you might have multiple requests each with different domain instructions.)
+Below is a complete snippet, referencing the *same* user-provided ranking guidance. We simply embed it under the `requests:` block along with queries, exclusion criteria, and info extraction:
 
 ```yaml
 config:
@@ -263,45 +288,72 @@ config:
       - core
       - arxiv
       - semantic_scholar
-    min_year: 2012
+    min_year: 2010
     max_year: 2025
 
 requests:
-  - id: fuzzy_logic_irrigation_scheduling
+
+  - id: fuzzy_logic_irrigation
     queries:
-      - "Fuzzy logic specifically for agricultural irrigation scheduling with real field trials"
-      - "Comparisons of Mamdani fuzzy irrigation control vs threshold-based methods measuring water usage"
-      - "Pilot-scale demonstration of fuzzy logic for crop water management, including yield metrics"
-      - "Fuzzy membership function design for soil moisture and canopy temperature in irrigation scheduling"
-      - "Quantitative performance results of fuzzy irrigation strategies in horticulture or row crops"
-      - "Real-world adoption of fuzzy irrigation scheduling with data on water savings"
-      - "Implementation details of fuzzy logic controllers for farmland water management"
-      - "Empirical evaluation of fuzzy vs. manual irrigation with yield or water efficiency improvements"
+      - "Fuzzy logic specifically for agricultural irrigation scheduling with real-world field data"
+      - "Comparisons of Mamdani fuzzy irrigation control vs threshold-based or PID methods with numeric results"
+      - "Pilot-scale or greenhouse trials applying fuzzy logic for water management in crops"
+      - "Rule-based fuzzy membership functions for soil moisture and crop stress factors in irrigation scheduling"
+      - "Any study demonstrating fuzzy logic and water-saving outcomes in agriculture"
+
     ranking_guidance: >
-      MANDATORY DOMAIN RESTRICTION:
-        - Paper MUST explicitly apply fuzzy logic to the scheduling or control of irrigation
-          in an agricultural context (fields, greenhouses, horticulture, orchard).
-        - Any fuzzy logic application not addressing irrigation water management is irrelevent,
-          rank it at the bottom.
+      1. This request is ONLY about “fuzzy logic methods for irrigation scheduling
+         in agriculture.” If a paper does not explicitly confirm it applies fuzzy logic 
+         (in any variant: Mamdani, Sugeno, etc.) to agricultural irrigation or 
+         water management, it must be deprioritized or effectively filtered out.
 
-      TOP-RANK CRITERIA:
-        1. Highest rank if real or pilot-scale data is explicitly provided: measured water usage,
-           yield data, stress metrics, or soil moisture results.
-        2. Extra priority if comparing fuzzy scheduling to other standard or conventional methods
-           (timer-based, threshold, PID) with numeric performance metrics.
-        3. Must detail membership functions, rules, or defuzzification steps specifically for
-           irrigation scheduling. Vague references to “fuzzy logic” alone are insufficient.
+      2. The topmost rank goes to papers that demonstrate fuzzy irrigation scheduling 
+         in real-world or pilot-scale agricultural settings with actual crops, 
+         water stress metrics, or field data. Among these:
+           - The more comprehensive the discussion of membership functions, 
+             rulesets, crop stress factors, and success metrics (like water savings, yield, 
+             or stress reduction), the better.
+           - If a study only simulates or uses a purely laboratory hydroponic approach 
+             without a real crop or real farmland environment, it is still valid 
+             if it explicitly states "irrigation scheduling" in the context of agriculture, 
+             but it ranks lower than full field or greenhouse trials.
 
-      PENALTIES / LOWER RANK:
-        - If only a theoretical or simulation approach with no real data, rank it lower than
-          those with actual field or greenhouse experiments.
-        - If the paper’s domain is not irrigation scheduling (pest control, fertilization, or
-          an entirely different domain), place it near the bottom or exclude.
+      3. Next in priority are those that compare fuzzy-based irrigation to 
+         other scheduling methods (like threshold triggers, PID, or standard 
+         ET-based approaches). The presence of a performance comparison with 
+         numeric results or at least robust methodology for measuring 
+         irrigation outcomes is a plus.
+
+      4. If a paper uses fuzzy logic for general agriculture tasks but NOT 
+         specifically for irrigation scheduling (e.g., fuzzy logic for fertilizer 
+         control or pest management only), rank it significantly lower 
+         (close to the bottom).
+
+      5. If a paper claims “fuzzy irrigation” but does not detail the rule-base 
+         or membership functions, or does not present any real or simulated 
+         performance metrics, it should rank lower than those with clear 
+         methodological detail. Real empirical validation (even partial) 
+         outranks purely conceptual or heuristic approaches.
+
+      6. If the paper’s domain is not agriculture or not about irrigation 
+         (for example, fuzzy logic for auto-braking systems or fuzzy 
+         logic for medical diagnosis), that is completely irrelevant; 
+         it should end up at the bottom of the rankings or excluded entirely. 
+
+      7. Whenever multiple relevant studies exist, we prefer the most recent 
+         (2015–present) especially if they use modern hardware or data-logging, 
+         or mention IoT-based sensors. But older pioneering papers that 
+         still strongly match “fuzzy logic in irrigation scheduling” can 
+         rank high if they are seminal references with data.
+
+      8. Any mention of “water-saving results” or “crop yield improvements” 
+         plus fuzzy logic scheduling is a key bonus. 
+         The more robust the result, the higher the priority.
 
     exclusion_criteria:
-      no_irrigation_context:
+      fuzzy_not_irrigation:
         type: boolean
-        description: "Exclude if the paper does not explicitly apply fuzzy logic to irrigation scheduling."
+        description: "Exclude or deprioritize if fuzzy logic is NOT explicitly about irrigation scheduling in agriculture."
 
     information_extraction:
       fuzzy_inference_type:
@@ -309,57 +361,77 @@ requests:
         description: "Which fuzzy method is used? (Mamdani, Sugeno, etc.)"
       scale_of_study:
         type: string
-        description: "Field-scale, pilot, greenhouse, or purely simulation?"
+        description: "Field-scale, pilot, greenhouse, or purely simulation/hydroponic?"
       performance_metrics:
         type: string
-        description: "Mentioned water savings, yield improvement, or other numerical results?"
-      comparison_with_baseline:
+        description: "Mentioned water savings, yield improvement, or numeric results"
+      comparison_to_baseline:
         type: boolean
-        description: "Does it compare fuzzy scheduling to threshold/manual/PID methods?"
-      membership_function_detail:
-        type: boolean
-        description: "Do they explicitly describe membership functions or defuzzification?"
+        description: "Does the paper compare fuzzy scheduling to threshold, PID, or standard ET-based approaches?"
 ```
 
 ---
 
-## 10. **Most Common Failure Modes (and How This Guide Prevents Them)**
+## 7. **Exclusion Criteria**: The Quick Filter
+
+If you know certain traits instantly disqualify a paper, define a boolean in `exclusion_criteria`. For instance:
+
+```yaml
+exclusion_criteria:
+  not_irrigation:
+    type: boolean
+    description: "Paper never mentions irrigation scheduling or water management in an agricultural context."
+
+  no_real_data:
+    type: boolean
+    description: "Paper has no real or pilot-scale data, not even simulation mention for irrigation scheduling."
+```
+
+Now the system can ask: “Does the paper fail the `not_irrigation` check? If yes, exclude it.” This ensures worthless papers never get near the top.
+
+---
+
+## 8. **Information Extraction**: Gleaning Key Data Points
+
+If you want specific fields from the top papers (like “accuracy,” “water_savings,” or “omics layers used”), define them under `information_extraction`. For instance:
+
+```yaml
+information_extraction:
+  water_savings:
+    type: float
+    description: "Percentage of water savings reported in the study"
+  membership_function_detail:
+    type: boolean
+    description: "Does the paper explicitly describe membership functions for the fuzzy system?"
+  cost_analysis:
+    type: boolean
+    description: "Any mention of cost or economic analysis of the irrigation approach?"
+```
+
+---
+
+## 9. **Most Common Failure Modes (and How This Guide Prevents Them)**
 
 1. **Ranking Irrelevant Domains Highly**  
    - Caused by leaving out your domain in ranking guidance.  
-   - **Solution**: “Strict domain requirement: must mention irrigation scheduling in agriculture.”  
+   - **Solution**: “STRICT domain requirement: must mention [XYZ domain + application]. Anything else is bottom rank.”
 
 2. **Failing to Demand Real Data**  
    - Caused by vague wording like “prefers empirical approach.”  
-   - **Solution**: “Highest rank if real or pilot-scale data is explicitly provided. Otherwise, rank lower.”  
+   - **Solution**: “Highest rank if real or pilot-scale data is explicitly provided with measured performance metrics.”
 
-3. **Ending Up with No or Few Valid Papers**  
-   - Possibly the domain is too narrow or your criteria are too strict. But typically, it’s safer to have stricter criteria than meaningless sprawl.  
+3. **Ending Up with Too Few Papers**  
+   - Possibly you’re being extremely strict. Usually better than drowning in irrelevant results, but keep an eye on it.
 
 4. **Overlooking Must-Have Performance Metrics**  
-   - If you never mention “water savings or yield improvements,” you’ll get random “fuzzy logic, done.”  
-   - **Solution**: In the ranking guidance, “papers must mention explicit performance metrics (water usage, yield).”  
+   - If you never mention “water savings” or “AUC” or “yield,” you get random results.  
+   - **Solution**: “papers must mention these metrics or they rank lower.”
+
+**Key**: Over-specify everything. If you think the system might “figure out” your domain, you are wrong. Spell it out.
 
 ---
 
-## 11. **Summary: The Hard Rules**
-
-1. **Start from the top**: Provide the reason for your domain constraints.  
-2. **Queries**: Repeatedly mention your domain and must-have aspects.  
-3. **Ranking Guidance**: 
-   - At least a paragraph that says “Any paper not about X is worthless—bottom rank.”  
-   - Then a list of explicit bullet points specifying top-rank conditions.  
-   - Then a list of explicit penalty conditions.  
-4. **(Optional) Exclusion Criteria**:  
-   - If you want an auto-flag for “No mention of irrigation,” define it and label it as a reason to exclude.  
-5. **Information Extraction**:  
-   - For each data point you want, define a typed field.  
-
-**Everything** must be spelled out. **Never** assume the system will “get it.” If you want something, **say it**—with unstoppable clarity.
-
----
-
-## 12. **Final Takeaway**
+## 10. **Final Takeaway**
 
 This guide is meant to be your authoritative blueprint for constructing YAML-based academic search queries. **Never** cut corners on specificity. The success or failure of your entire literature review hinges on how precisely you specify your domain constraints in the ranking guidance (and queries). If you do it right—**with the level of detail shown above**—you will get high-quality, relevant results every time. If you do it wrong—**even just a little**—the search collapses, returning random irrelevance.
 

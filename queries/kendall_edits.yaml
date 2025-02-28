@@ -2,14 +2,14 @@ config:
   processing:
     # We want extensive coverage yet still manageable
     # We'll generate 10 queries per request, each retrieving 12 papers, giving up to ~120 hits/request
-    num_queries: 10
-    papers_per_query: 12
+    num_queries: 5
+    papers_per_query: 10
 
     # We'll keep the top 15 after ranking to have enough data for thorough review
-    num_papers_to_return: 15
+    num_papers_to_return: 10
 
   logging:
-    level: DEBUG
+    level: ERROR
 
   search:
     platforms:

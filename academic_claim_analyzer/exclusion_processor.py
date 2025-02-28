@@ -39,16 +39,63 @@ async def apply_exclusion_criteria(analysis: RequestAnalysis) -> None:
             extraction_result={}
         )
         prompt_text = f"""
-Assess the following academic paper against the specified exclusion criteria and data extraction requirements.
+You are analyzing the following academic paper to (1) evaluate certain Exclusion Criteria (boolean flags) and (2) extract structured data fields. Read the entire text carefully and then produce a single JSON object with **exactly** the fields specified in the schema below. Do not add extra keys, text, or commentary.
+
+---
+
+**Paper to Analyze**
 
 Title: {rp.title}
-Full Text: {rp.full_text}
 
-Return a JSON object that exactly matches these fields:
-Exclusion criteria fields (boolean) => exclude if any is true.
-Extraction fields => fill with appropriate data.
+Full Text:
+{rp.full_text}
 
-Here is the schema: {CombinedSchema.model_json_schema()}
+---
+
+**Task Requirements**
+
+1. **Exclusion Criteria** (boolean fields):  
+   - Each field asks whether the paper meets some condition that would exclude it from further analysis.  
+   - If the paper’s text clearly indicates the condition is true, set that field to `true`.  
+   - If the text either contradicts it or does not mention it, set that field to `false`.  
+   - If **any** boolean exclusion criterion is `true`, the paper is considered excluded.
+
+2. **Data Extraction Fields** (string, float, integer, boolean, or list):  
+   - Provide the requested information from the paper.  
+   - If the paper does not specify a requested piece of data (e.g., no mention of water savings), use the fallback indicated by the schema:  
+     - For strings: `"N/A"`  
+     - For floats or integers: `-1` (or `-1.0`)  
+     - For booleans: `false`  
+     - For lists: `[]`  
+
+3. **Schema**  
+   - Here is a JSON schema describing all required fields and the expected data types.  
+   - **You must** return a JSON object matching this schema exactly—no extra keys or wrappers.  
+   - For example, if the schema says a field is a `float`, you must return a numeric literal like `3.14`, `0.0`, or `-1.0`.
+
+Schema Definition:
+{CombinedSchema.model_json_schema()}
+
+---
+
+**Output Format Requirements**
+
+1. Return only a single **valid JSON object** (no markdown, no code block fences, no extra commentary).  
+2. Every field in the schema must be present in the JSON output.  
+3. For each Exclusion Criterion, output `true` or `false`.  
+4. For each Extraction Field, fill in the best possible value or the fallback default if missing.  
+5. Do not include any text or disclaimers—just the raw JSON.
+
+---
+
+### Important Clarifications
+
+- If the paper’s text is ambiguous or silent about a particular boolean exclusion criterion, set that criterion to `false` (i.e., we assume it does **not** meet that exclusion).  
+- If the text is ambiguous or silent about a requested numeric or string field, apply the fallback (`-1`/`-1.0` for numbers, `"N/A"` for strings, `[]` for lists, `false` for booleans).  
+- Do not guess or fabricate data.  
+- **Do not** add any fields that are not in the schema.  
+
+**Now produce the JSON output.** Do not include any extra text before or after the JSON.
 """
         prompts.append(prompt_text)
         ranked_papers.append(rp)
